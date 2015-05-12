@@ -36,7 +36,7 @@ import sys
 import csv
 
 
-def read_dicionario(fname, var):
+def read_dicionario(var):
     """
     Leitura do dicionario de posicao das variaveis no arquivo de microdados
     :param fname:
@@ -44,7 +44,7 @@ def read_dicionario(fname, var):
     :return:
     """
 
-    fin = open(fname, 'r')
+    fin = open('data/Layout_microdados_Amostra-pessoa.csv', 'r')
     fin.next()
     frows = csv.DictReader(fin, delimiter=',')
 
