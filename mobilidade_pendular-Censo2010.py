@@ -1,13 +1,34 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-##################################
-# Código desenvolvido por 
-# Marcelo F C Gomes
-# marfcg <at> gmail <dot> com
-#
-# Implementacao de estrutura de DataFrame com Pandas
-##################################
+"""
+Script para extração da matriz de mobilidade a partir
+dos microdados do Censo 2010.
+
+Arquivos necessários:
+./data/migracao_e_deslocamento_municipios-2010.csv
+./data/migracao_e_deslocamento_unidades_da_federacao-2010.csv
+./data/migracao_e_deslocamento_paises_estrangeiros-2010.csv
+./data/Layout_microdados_Amosra-pessoa.csv
+
+Dados de entrada:
+Caminho para o arquivo com os microdados de pessoas
+
+Uso:
+python mobilidade_pendular-Censo2010.py <caminho para microdados>
+
+Ex.:
+python mobilidade_pendular-Censo2010.py data/Amostra_Pessoas_33.txt
+
+Saida:
+./data/tab3605-microdados.csv  - Tabela similar àquela obtida no SIDRA
+./data/tab3599-microdados.csv  - Tabela similar àquela obtida no SIDRA
+./data/matriz-mobilidade-microdados.csv  - Matriz de mobilidade
+
+Código desenvolvido por 
+Marcelo F C Gomes
+marfcg <at> gmail <dot> com
+"""
 
 from collections import defaultdict
 import numpy as np
@@ -20,40 +41,50 @@ FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
 logging.basicConfig(format=FORMAT)
 logger.setLevel(logging.DEBUG)
 
-def read_dicionario(fname,var):
-    # Leitura do dicionario de posicao das variaveis no arquivo de microdados
-    logger.debug('inciando')
 
-    fin = open(fname, 'r')
+def read_dicionario(var):
+    """
+    Leitura do dicionario de posicao das variaveis no arquivo de microdados
+    :param fname:
+    :param var:
+    :return:
+    """
+    logger.debug('iniciando')
+
+    fin = open('data/Layout_microdados_Amostra-pessoa.csv', 'r')
     fin.next()
     frows = csv.DictReader(fin, delimiter=',')
-    
-    ponteiros = {key:{} for key in var}
+
+    ponteiros = {key: {} for key in var}
     for row in frows:
         if row['VAR'] in var:
             # Posicoes reduzidas em uma unidade por conta da estrutura
             # posicional do Python, que comeca em 0 e nao em 1
             pi = int(row['POSIÇÃO INICIAL']) - 1
-            sint = slice(pi, pi+int(row['INT']))
+            sint = slice(pi, pi + int(row['INT']))
             if row['DEC'] == '':
                 sdec = ''
             else:
                 # slice(a,b) vai de a até a posicao b-1
                 pf = int(row['POSIÇÃO FINAL'])
-                sdec = slice(pf-int(row['DEC']),pf)
+                sdec = slice(pf - int(row['DEC']), pf)
 
-            ponteiros[row['VAR']] = {'NOME':row['NOME'],
-                                     'FATIA':sint,
-                                     'FATIADEC':sdec}
-            
+            ponteiros[row['VAR']] = {'NOME': row['NOME'],
+                                     'FATIA': sint,
+                                     'FATIADEC': sdec}
+
     fin.close()
     return ponteiros
+
 
 ##########################################################
 
 def read_municipio():
-    # Leitura da tabela de municipios e codigos de deslocamento
-    logger.debug('inciando')
+    """
+    Leitura da tabela de municipios e codigos de deslocamento
+    :return:
+    """
+    logger.debug('iniciando')
 
     fin = open('data/migracao_e_deslocamento_municipios-2010.csv', 'r')
     fin.next()
@@ -63,57 +94,75 @@ def read_municipio():
 
     codmun = {}
     for row in frows:
-        codmun[row['Código']] = {'Município':row['Municípios'],
-                                 'UF':row['Unidades da Federação']}
-        
+        codmun[row['Código']] = {'Município': row['Municípios'],
+                                 'UF': row['Unidades da Federação']}
+
     fin.close()
     return codmun
+
 
 ##########################################################
 
 def read_pais():
-    # Leitura da tabela de paises e codigos de deslocamento
+    """
+    Leitura da tabela de paises e codigos de deslocamento
+    :return:
+    """
     logger.debug('inciando')
 
     fin = open('data/migracao_e_deslocamento_paises_estrangeiros-2010.csv')
     fin.next()
     fin.next()
-    
+
     frows = csv.DictReader(fin, delimiter=',')
 
     codpais = {}
     for row in frows:
-        codpais[row['CÓDIGOS']] = {'País':row['PAÍSES ESTRANGEIROS'],
-                                 'Continente':row['CONTINENTES']}
-        
+        codpais[row['CÓDIGOS']] = {'País': row['PAÍSES ESTRANGEIROS'],
+                                   'Continente': row['CONTINENTES']}
+
     fin.close()
     logger.debug('saindo')
     return codpais
 
+
 ##########################################################
 
 def read_uf():
-    # Leitura da tabela de UFs e codigo de deslocamento
+    """
+    Leitura da tabela de UFs e codigo de deslocamento
+    :return:
+    """
     logger.debug('inciando')
 
     fin = open('data/migracao_e_deslocamento_unidades_da_federacao-2010.csv')
     fin.next()
     fin.next()
-    
+
     frows = csv.DictReader(fin, delimiter=',')
 
     coduf = {}
     for row in frows:
         coduf[row['CÓDIGOS']] = row['UNIDADES DA FEDERAÇÃO']
-        
+
     fin.close()
     logger.debug('saindo')
     return coduf
 
+
 ##########################################################
 
 def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
-    # Escrever as tabelas relevantes de saida
+    """
+    Escrever as tabelas relevantes de saida
+    :param tab3599:
+    :param tab3605:
+    :param origdest:
+    :param codmun:
+    :param coduf:
+    :param codpais:
+    :return:
+    """
     logger.debug('inciando')
 
     # Escrever tab3605 (pessoas com 10 anos ou mais, por ocupacao, local de ocupacao,
@@ -125,19 +174,19 @@ def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
     tab3599.to_csv(path_or_buf='tab3599-microdados-df.csv')
 
     # Escrever matriz origem-destino por cidade
-    fout = open('matriz-mobilidade-microdados.csv', 'w')
-    fieldnames = ['origem','destino país', 'destino uf', 'destino município','total']
-    csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames = fieldnames)
+    fout = open('data/matriz-mobilidade-microdados.csv', 'w')
+    fieldnames = ['origem', 'destino país', 'destino uf', 'destino município', 'total']
+    csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames=fieldnames)
     csvwriter.writeheader()
-    d = {fn:'' for fn in fieldnames}
+    d = {fn: '' for fn in fieldnames}
     for mun in sorted(origdest.keys()):
         d['origem'] = codmun[mun]['Município']
-        
+
         for dest, peso in sorted(origdest[mun].items()):
             dest_pais = dest[0:7]
             dest_uf = dest[7:14]
             dest_mun = dest[14:21]
-            
+
             if dest_pais not in codpais:
                 d['destino país'] = 'Em Branco'
             else:
@@ -151,39 +200,44 @@ def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
             else:
                 d['destino município'] = codmun[dest_mun]['Município']
 
-            d['total'] = peso
+            d['total'] = round(peso)
 
             csvwriter.writerow(d)
     fout.close()
-            
     logger.debug('saindo')
     return
 
 
-def main(fdict,fdados):
-    logger.debug('inciando')
-    
-    varlist = {'V0001':'res.uf', #Código UF
-               'V0002':'res.mun', #Código Município
-               'V0010':'peso', #Peso amostral
-               'V6036':'idade', #Idade em anos
-               'V0628':'escola', #Frequenta escola ou creche
-               'V0636':'escola.local', #Local da escola
-               'V6362':'escola.uf', #UF da escola
-               'V6364':'escola.mun', #Municipio da escola
-               'V6366':'escola.pais', #Pais da escola
-               'V0660':'trab.local', #Local de trabalho
-               'V6602':'trab.uf', #UF de trabalho
-               'V6604':'trab.mun', #Municipio de trabalho
-               'V6606':'trab.pais', #Pais de trabalho
-               'V0661':'trab.diario', #Retorna do trabalho para casa diariamente
-               'V0662':'trab.desloc', #Tempo habitual de deslocamento
-               'V6920':'trab.situacao' #Situacao de ocupacao na semana de referencia
+def main(fdados):
+    """
+    Faz a leitura do arquivo dos microdados e extrai dados de mobilidade
+    Dados de entrada
+    :param fdados:  # Caminho para o microdado relativo às pessoas
+                    # Amostra_Pessoas_<#UF>.txt
+    :return:
+    """
+    varlist = {'V0001': 'res.uf',  # Código UF
+               'V0002': 'res.mun',  # Código Município
+               'V0010': 'peso',  # Peso amostral
+               'V6036': 'idade',  # Idade em anos
+               'V0628': 'escola',  # Frequenta escola ou creche
+               'V0636': 'escola.local',  # Local da escola
+               'V6362': 'escola.uf',  # UF da escola
+               'V6364': 'escola.mun',  # Municipio da escola
+               'V6366': 'escola.pais',  # Pais da escola
+               'V0660': 'trab.local',  # Local de trabalho
+               'V6602': 'trab.uf',  # UF de trabalho
+               'V6604': 'trab.mun',  # Municipio de trabalho
+               'V6606': 'trab.pais',  # Pais de trabalho
+               'V0661': 'trab.diario',  # Retorna do trabalho para casa diariamente
+               'V0662': 'trab.desloc',  # Tempo habitual de deslocamento
+               'V6920': 'trab.situacao'  # Situacao de ocupacao na semana de referencia
                }
+    logger.debug('inciando')
     
 
     # Levanta informacao sobre posicao das variaveis de interesse:
-    ponteiros = read_dicionario(fdict,varlist.keys())
+    ponteiros = read_dicionario(varlist.keys())
 
     # Altera chaves para simplificar:
     for key, value in varlist.iteritems():
@@ -219,7 +273,6 @@ def main(fdict,fdados):
                         'movel':0})
         
         origdest[cod] = defaultdict(int)
-
         
         for trab in trablist:
             dicttmp = {'local':cod,
@@ -266,7 +319,7 @@ def main(fdict,fdados):
     pop_mun = pd.DataFrame(pop_mun, columns=('local','total','fixa','movel'))
 
     tagescola = {'1': 'munres', '2': 'outromun', '3': 'outropais'}
-    tagtrab = {'1': 'munres', '2': 'munres', '3': 'outromun', '4': 'outropais', '5':'variosmun'}
+    tagtrab = {'1': 'munres', '2': 'munres', '3': 'outromun', '4': 'outropais', '5': 'variosmun'}
 
     logger.debug('Leitura das linhas de dados')
     count = 0
@@ -320,11 +373,11 @@ def main(fdict,fdados):
             freqescola = ['freq']
 
         escola = line[ponteiros['escola.local']['FATIA']].strip()
-        if escola != '': # Se nao frequenta, esta variavel esta em branco
+        if escola != '':  # Se nao frequenta, esta variavel esta em branco
             freqescola.append(tagescola[escola])
             escola = int(escola)
 
-            if escola >= 2: # Fora do municipio
+            if escola >= 2:  # Fora do municipio
                 escola_res = False
                 escola_uf = line[ponteiros['escola.uf']['FATIA']]
                 escola_mun = line[ponteiros['escola.mun']['FATIA']]
@@ -340,8 +393,8 @@ def main(fdict,fdados):
         if trab != '':
             freqtrab.append(tagtrab[trab])
             trab = int(trab)
-            
-            if trab > 2: # Fora do municipio
+
+            if trab > 2:  # Fora do municipio
                 trab_res = False
                 trab_uf = line[ponteiros['trab.uf']['FATIA']]
                 trab_mun = line[ponteiros['trab.mun']['FATIA']]
@@ -372,6 +425,6 @@ def main(fdict,fdados):
     logger.debug('Finalizada leitura dos dados')            
     escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais)
 
-    
+
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1])
