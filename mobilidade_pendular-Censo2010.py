@@ -1,11 +1,34 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-##################################
-# Código desenvolvido por 
-# Marcelo F C Gomes
-# marfcg <at> gmail <dot> com
-##################################
+"""
+Script para extração da matriz de mobilidade a partir
+dos microdados do Censo 2010.
+
+Arquivos necessários:
+./data/migracao_e_deslocamento_municipios-2010.csv
+./data/migracao_e_deslocamento_unidades_da_federacao-2010.csv
+./data/migracao_e_deslocamento_paises_estrangeiros-2010.csv
+./data/Layout_microdados_Amosra-pessoa.csv
+
+Dados de entrada:
+Caminho para o arquivo com os microdados de pessoas
+
+Uso:
+python mobilidade_pendular-Censo2010.py <caminho para microdados>
+
+Ex.:
+python mobilidade_pendular-Censo2010.py data/Amostra_Pessoas_33.txt
+
+Saida:
+./data/tab3605-microdados.csv  - Tabela similar àquela obtida no SIDRA
+./data/tab3599-microdados.csv  - Tabela similar àquela obtida no SIDRA
+./data/matriz-mobilidade-microdados.csv  - Matriz de mobilidade
+
+Código desenvolvido por 
+Marcelo F C Gomes
+marfcg <at> gmail <dot> com
+"""
 
 from collections import defaultdict
 import numpy as np
@@ -196,11 +219,12 @@ def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
     return
 
 
-def main(fdict, fdados):
+def main(fdados):
     """
-
-    :param fdict:
-    :param fdados:
+    Faz a leitura do arquivo dos microdados e extrai dados de mobilidade
+    Dados de entrada
+    :param fdados:  # Caminho para o microdado relativo às pessoas
+                    # Amostra_Pessoas_<#UF>.txt
     :return:
     """
     varlist = {'V0001': 'res.uf',  # Código UF
@@ -223,7 +247,7 @@ def main(fdict, fdados):
 
 
     # Levanta informacao sobre posicao das variaveis de interesse:
-    ponteiros = read_dicionario(fdict, varlist.keys())
+    ponteiros = read_dicionario(varlist.keys())
 
     # Altera chaves para simplificar:
     for key, value in varlist.iteritems():
@@ -415,4 +439,4 @@ def main(fdict, fdados):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1])
