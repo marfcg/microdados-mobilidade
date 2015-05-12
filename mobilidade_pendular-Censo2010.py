@@ -14,10 +14,15 @@ import numpy as np
 import pandas as pd
 import sys
 import csv
-
+import logging
+logger = logging.getLogger('root')
+FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
+logging.basicConfig(format=FORMAT)
+logger.setLevel(logging.DEBUG)
 
 def read_dicionario(fname,var):
     # Leitura do dicionario de posicao das variaveis no arquivo de microdados
+    logger.debug('inciando')
 
     fin = open(fname, 'r')
     fin.next()
@@ -48,6 +53,7 @@ def read_dicionario(fname,var):
 
 def read_municipio():
     # Leitura da tabela de municipios e codigos de deslocamento
+    logger.debug('inciando')
 
     fin = open('data/migracao_e_deslocamento_municipios-2010.csv', 'r')
     fin.next()
@@ -67,6 +73,7 @@ def read_municipio():
 
 def read_pais():
     # Leitura da tabela de paises e codigos de deslocamento
+    logger.debug('inciando')
 
     fin = open('data/migracao_e_deslocamento_paises_estrangeiros-2010.csv')
     fin.next()
@@ -80,12 +87,14 @@ def read_pais():
                                  'Continente':row['CONTINENTES']}
         
     fin.close()
+    logger.debug('saindo')
     return codpais
 
 ##########################################################
 
 def read_uf():
     # Leitura da tabela de UFs e codigo de deslocamento
+    logger.debug('inciando')
 
     fin = open('data/migracao_e_deslocamento_unidades_da_federacao-2010.csv')
     fin.next()
@@ -98,12 +107,14 @@ def read_uf():
         coduf[row['CÓDIGOS']] = row['UNIDADES DA FEDERAÇÃO']
         
     fin.close()
+    logger.debug('saindo')
     return coduf
 
 ##########################################################
 
 def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
     # Escrever as tabelas relevantes de saida
+    logger.debug('inciando')
 
     # Escrever tab3605 (pessoas com 10 anos ou mais, por ocupacao, local de ocupacao,
     # freq escolar e local de estudo)
@@ -145,10 +156,12 @@ def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
             csvwriter.writerow(d)
     fout.close()
             
+    logger.debug('saindo')
     return
 
 
 def main(fdict,fdados):
+    logger.debug('inciando')
     
     varlist = {'V0001':'res.uf', #Código UF
                'V0002':'res.mun', #Código Município
@@ -189,7 +202,7 @@ def main(fdict,fdados):
                 'outropais',
                 'variosmun',
                 'naoocupadas']
-    dictidades = ['0-4','5-9']
+    listidades = ['0-4','5-9']
     pop_mun = []
     tab3605 = []
     tab3599 = []
@@ -219,7 +232,7 @@ def main(fdict,fdados):
                        'naofreq':0}
             tab3605.append(dicttmp)
 
-        for idade in dictidades:
+        for idade in listidades:
             dicttmp = {'local':cod,
                        'idade':idade,
                        'total':0,
@@ -232,7 +245,7 @@ def main(fdict,fdados):
 
     del(dicttmp)
     del(trablist)
-    del(dictidades)
+    del(listidades)
 
     tab3599 = pd.DataFrame(tab3599,columns=('local',
                                             'idade',
@@ -255,8 +268,13 @@ def main(fdict,fdados):
     tagescola = {'1': 'munres', '2': 'outromun', '3': 'outropais'}
     tagtrab = {'1': 'munres', '2': 'munres', '3': 'outromun', '4': 'outropais', '5':'variosmun'}
 
+    logger.debug('Leitura das linhas de dados')
+    count = 0
     fin = open(fdados, 'r')
     for line in fin:
+        #count += 1
+        #logger.debug('Lendo linha %s' %(count))
+        
 
         freqescola = ['naofreq']
         escola_res = True
@@ -283,18 +301,18 @@ def main(fdict,fdados):
                          line[ponteiros['peso']['FATIADEC']])
 
         # Populacao total do municipio:
-        pop_mun.total[pop_mun.local==mun] += peso
+        pop_mun.loc[pop_mun.local==mun, 'total'] += peso
         
         if idade < 5:
             idadelbl = '0-4'
-            tab3599.total[(tab3599.local==mun) & (tab3599.idade==idadelbl)] += peso
+            tab3599.loc[(tab3599.local==mun) & (tab3599.idade==idadelbl), 'total'] += peso
             menor = True
         elif idade < 10:
             idadelbl = '5-9'
-            tab3599.total[(tab3599.local==mun) & (tab3599.idade==idadelbl)] += peso
+            tab3599.loc[(tab3599.local==mun) & (tab3599.idade==idadelbl), 'total'] += peso
             menor = True
         else:
-            tab3605.total[(tab3605.local==mun) & (tab3605.trab=='total')] += peso
+            tab3605.loc[(tab3605.local==mun) & (tab3605.trab=='total'), 'total'] += peso
             menor = False
 
         # Verifica se frequenta escola:
@@ -334,9 +352,9 @@ def main(fdict,fdados):
 
         # Destino:
         if trab_res or escola_res:
-            pop_mun.fixa[pop_mun.local==mun] += peso
+            pop_mun.loc[pop_mun.local==mun, 'fixa'] += peso
         else:
-            pop_mun.movel[pop_mun.local==mun] += peso
+            pop_mun.loc[pop_mun.local==mun, 'movel'] += peso
 
             if not trab_res:
                 origdest[mun][trab_dest] += peso
@@ -351,7 +369,7 @@ def main(fdict,fdados):
             freqtrab.append('total')
             tab3605.loc[(tab3605.local==mun) & (tab3605.trab.isin(freqtrab)), freqescola] += peso
                 
-
+    logger.debug('Finalizada leitura dos dados')            
     escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais)
 
     
