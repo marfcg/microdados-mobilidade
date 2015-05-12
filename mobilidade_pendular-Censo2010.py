@@ -14,7 +14,12 @@ import csv
 
 
 def read_dicionario(fname, var):
-    # Leitura do dicionario de posicao das variaveis no arquivo de microdados
+    """
+    Leitura do dicionario de posicao das variaveis no arquivo de microdados
+    :param fname:
+    :param var:
+    :return:
+    """
 
     fin = open(fname, 'r')
     fin.next()
@@ -45,7 +50,10 @@ def read_dicionario(fname, var):
 ##########################################################
 
 def read_municipio():
-    # Leitura da tabela de municipios e codigos de deslocamento
+    """
+    Leitura da tabela de municipios e codigos de deslocamento
+    :return:
+    """
 
     fin = open('migracao_e_deslocamento_municipios-2010.csv', 'r')
     fin.next()
@@ -65,8 +73,10 @@ def read_municipio():
 ##########################################################
 
 def read_pais():
-    # Leitura da tabela de paises e codigos de deslocamento
-
+    """
+    Leitura da tabela de paises e codigos de deslocamento
+    :return:
+    """
     fin = open('migracao_e_deslocamento_paises_estrangeiros-2010.csv')
     fin.next()
     fin.next()
@@ -85,7 +95,10 @@ def read_pais():
 ##########################################################
 
 def read_uf():
-    # Leitura da tabela de UFs e codigo de deslocamento
+    """
+    Leitura da tabela de UFs e codigo de deslocamento
+    :return:
+    """
 
     fin = open('migracao_e_deslocamento_unidades_da_federacao-2010.csv')
     fin.next()
@@ -104,10 +117,20 @@ def read_uf():
 ##########################################################
 
 def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
-    # Escrever as tabelas relevantes de saida
+    """
+    Escrever as tabelas relevantes de saida
 
     # Escrever tab3605 (pessoas com 10 anos ou mais, por ocupacao, local de ocupacao,
     # freq escolar e local de estudo)
+    :param tab3599:
+    :param tab3605:
+    :param origdest:
+    :param codmun:
+    :param coduf:
+    :param codpais:
+    :return:
+    """
+
     fout = open('tab3605-microdados.csv', 'w')
     fieldnames = ['local', 'trab', 'total', 'freq', 'munres', 'outromun', 'outropais', 'naofreq']
     csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames=fieldnames)
@@ -174,6 +197,12 @@ def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
 
 
 def main(fdict, fdados):
+    """
+
+    :param fdict:
+    :param fdados:
+    :return:
+    """
     varlist = {'V0001': 'res.uf',  # Código UF
                'V0002': 'res.mun',  #Código Município
                'V0010': 'peso',  #Peso amostral
