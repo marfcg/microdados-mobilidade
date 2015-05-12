@@ -5,10 +5,13 @@
 # Código desenvolvido por 
 # Marcelo F C Gomes
 # marfcg <at> gmail <dot> com
+#
+# Implementacao de estrutura de DataFrame com Pandas
 ##################################
 
 from collections import defaultdict
 import numpy as np
+import pandas as pd
 import sys
 import csv
 
@@ -46,7 +49,7 @@ def read_dicionario(fname,var):
 def read_municipio():
     # Leitura da tabela de municipios e codigos de deslocamento
 
-    fin = open('migracao_e_deslocamento_municipios-2010.csv', 'r')
+    fin = open('data/migracao_e_deslocamento_municipios-2010.csv', 'r')
     fin.next()
     fin.next()
 
@@ -65,7 +68,7 @@ def read_municipio():
 def read_pais():
     # Leitura da tabela de paises e codigos de deslocamento
 
-    fin = open('migracao_e_deslocamento_paises_estrangeiros-2010.csv')
+    fin = open('data/migracao_e_deslocamento_paises_estrangeiros-2010.csv')
     fin.next()
     fin.next()
     
@@ -84,7 +87,7 @@ def read_pais():
 def read_uf():
     # Leitura da tabela de UFs e codigo de deslocamento
 
-    fin = open('migracao_e_deslocamento_unidades_da_federacao-2010.csv')
+    fin = open('data/migracao_e_deslocamento_unidades_da_federacao-2010.csv')
     fin.next()
     fin.next()
     
@@ -104,35 +107,11 @@ def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
 
     # Escrever tab3605 (pessoas com 10 anos ou mais, por ocupacao, local de ocupacao,
     # freq escolar e local de estudo)
-    fout = open('tab3605-microdados.csv', 'w')
-    fieldnames = ['local','trab','total','freq','munres','outromun','outropais','naofreq']
-    csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames = fieldnames)
-    csvwriter.writeheader()
-    d = {fn:'' for fn in fieldnames}
-
-    for mun in sorted(tab3605.keys()):
-        d['local'] = codmun[mun]['Município']
-        for trabfn in tab3605[mun].keys():
-            d['trab'] = trabfn
-            d.update(tab3605[mun][trabfn])
-            csvwriter.writerow(d)
-    fout.close()
+    tab3605.to_csv(path_or_buf='tab3605-microdados-df.csv')
 
     # Escrever tab3599 simples (pessoas com ate 9 anos, por frequencia escolar e local
     # de estudo):
-    fout = open('tab3599-microdados.csv', 'w')
-    fieldnames = ['local','idade','total','freq','munres','outromun','outropais','naofreq']
-    csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames = fieldnames)
-    csvwriter.writeheader()
-    d = {fn:'' for fn in fieldnames}
-
-    for mun in sorted(tab3599.keys()):
-        d['local'] = codmun[mun]['Município']
-        for idade in tab3599[mun].keys():
-            d['idade'] = idade
-            d.update(tab3599[mun][idade])
-            csvwriter.writerow(d)
-    fout.close()
+    tab3599.to_csv(path_or_buf='tab3599-microdados-df.csv')
 
     # Escrever matriz origem-destino por cidade
     fout = open('matriz-mobilidade-microdados.csv', 'w')
@@ -202,52 +181,76 @@ def main(fdict,fdados):
     coduf = read_uf()
     codpais = read_pais()
 
-    # Prepara dicionarios de interesse:
-    pop_mun = {}
+    # Prepara dataframes de interesse:
+    trablist = ['total',
+                'ocupadas',
+                'munres',
+                'outromun',
+                'outropais',
+                'variosmun',
+                'naoocupadas']
+    dictidades = ['0-4','5-9']
+    pop_mun = []
+    tab3605 = []
+    tab3599 = []
     origdest = {}
-    tab3605 = {}
-    tab3599 = {}
 
     for cod in codmun:
 
         if cod[0:2] != '33' or cod[2:] == '99999':
             continue
 
-        pop_mun[cod] = {'total':0,
+        pop_mun.append({'local':cod,
+                        'total':0,
                         'fixa':0,
-                        'movel':0}
+                        'movel':0})
         
         origdest[cod] = defaultdict(int)
 
-        tab3605[cod] = {'total':{},
-                        'ocupadas':{},
-                        'munres':{},
-                        'munresdom':{},
-                        'munresfora':{},
-                        'outromun':{},
-                        'outropais':{},
-                        'variosmun':{},
-                        'naoocupadas':{}}
+        
+        for trab in trablist:
+            dicttmp = {'local':cod,
+                       'trab':trab,
+                       'total':0,
+                       'freq':0,
+                       'munres':0,
+                       'outromun':0,
+                       'outropais':0,
+                       'naofreq':0}
+            tab3605.append(dicttmp)
 
-        for key in tab3605[cod]:
-            tab3605[cod][key] = {'total':0,
-                                 'freq':0,
-                                 'munres':0,
-                                 'outromun':0,
-                                 'outropais':0,
-                                 'naofreq':0}
+        for idade in dictidades:
+            dicttmp = {'local':cod,
+                       'idade':idade,
+                       'total':0,
+                       'freq':0,
+                       'munres':0,
+                       'outromun':0,
+                       'outropais':0,
+                       'naofreq':0}
+            tab3599.append(dicttmp)
 
-        tab3599[cod] = {'total':{},
-                        '0-4':{},
-                        '5-9':{}}
+    del(dicttmp)
+    del(trablist)
+    del(dictidades)
 
-        for key in tab3599[cod]:
-            tab3599[cod][key] = {'total':0,
-                                 'freq':0,
-                                 'munres':0,
-                                 'outromun':0,
-                                 'outropais':0,
-                                 'naofreq':0}
+    tab3599 = pd.DataFrame(tab3599,columns=('local',
+                                            'idade',
+                                            'total',
+                                            'freq',
+                                            'munres',
+                                            'outromun',
+                                            'outropais',
+                                            'naofreq'))
+    tab3605 = pd.DataFrame(tab3605, columns=('local',
+                                             'trab',
+                                             'total',
+                                             'freq',
+                                             'munres',
+                                             'outromun',
+                                             'outropais',
+                                             'naofreq'))
+    pop_mun = pd.DataFrame(pop_mun, columns=('local','total','fixa','movel'))
 
     tagescola = {'1': 'munres', '2': 'outromun', '3': 'outropais'}
     tagtrab = {'1': 'munres', '2': 'munres', '3': 'outromun', '4': 'outropais', '5':'variosmun'}
@@ -255,13 +258,13 @@ def main(fdict,fdados):
     fin = open(fdados, 'r')
     for line in fin:
 
-        freqescola = False
+        freqescola = ['naofreq']
         escola_res = True
         escola_uf = ''
         escola_mun = ''
         escola_pais = ''
 
-        freqtrab = False
+        freqtrab = ['naoocupada']
         trab_res = True
         trab_uf = ''
         trab_mun = ''
@@ -280,29 +283,27 @@ def main(fdict,fdados):
                          line[ponteiros['peso']['FATIADEC']])
 
         # Populacao total do municipio:
-        pop_mun[mun]['total'] += peso
+        pop_mun.total[pop_mun.local==mun] += peso
         
         if idade < 5:
-            tab3599[mun]['total']['total'] += peso
-            tab3599[mun]['0-4']['total'] += peso
+            idadelbl = '0-4'
+            tab3599.total[(tab3599.local==mun) & (tab3599.idade==idadelbl)] += peso
             menor = True
-            idadelabel = '0-4'
         elif idade < 10:
-            tab3599[mun]['total']['total'] += peso
-            tab3599[mun]['5-9']['total'] += peso
+            idadelbl = '5-9'
+            tab3599.total[(tab3599.local==mun) & (tab3599.idade==idadelbl)] += peso
             menor = True
-            idadelabel = '5-9'
         else:
-            tab3605[mun]['total']['total'] += peso
+            tab3605.total[(tab3605.local==mun) & (tab3605.trab=='total')] += peso
             menor = False
 
         # Verifica se frequenta escola:
         if int(line[ponteiros['escola']['FATIA']]) < 3:
-            freqescola = True
+            freqescola = ['freq']
 
         escola = line[ponteiros['escola.local']['FATIA']].strip()
         if escola != '': # Se nao frequenta, esta variavel esta em branco
-            escolalabel = tagescola[escola]
+            freqescola.append(tagescola[escola])
             escola = int(escola)
 
             if escola >= 2: # Fora do municipio
@@ -314,12 +315,12 @@ def main(fdict,fdados):
 
         # Verifica se trabalha:
         if line[ponteiros['trab.situacao']['FATIA']] == '1':
-            freqtrab=True
+            freqtrab = ['ocupadas']
 
         trab = line[ponteiros['trab.local']['FATIA']].strip()
         
         if trab != '':
-            trablabel = tagtrab[trab]
+            freqtrab.append(tagtrab[trab])
             trab = int(trab)
             
             if trab > 2: # Fora do municipio
@@ -333,9 +334,9 @@ def main(fdict,fdados):
 
         # Destino:
         if trab_res or escola_res:
-            pop_mun[mun]['fixa'] += peso
+            pop_mun.fixa[pop_mun.local==mun] += peso
         else:
-            pop_mun[mun]['movel'] += peso
+            pop_mun.movel[pop_mun.local==mun] += peso
 
             if not trab_res:
                 origdest[mun][trab_dest] += peso
@@ -344,40 +345,11 @@ def main(fdict,fdados):
 
         # Mobilidade para trabalho e/ou estudo:
         if menor:
-            if freqescola:
-                tab3599[mun]['total']['freq'] += peso
-                tab3599[mun][idadelabel]['freq'] += peso
-                tab3599[mun]['total'][escolalabel] += peso
-                tab3599[mun][idadelabel][escolalabel] += peso
-            else:
-                tab3599[mun]['total']['naofreq'] += peso
-                tab3599[mun][idadelabel]['naofreq'] += peso
+            tab3599.loc[(tab3599.local==mun) & (tab3599.idade==idadelbl), freqescola] += peso
         else:
-            if freqescola:
-                tab3605[mun]['total']['freq'] += peso
-            else:
-                tab3605[mun]['total']['naofreq'] += peso
-
-            if freqtrab:
-                tab3605[mun]['ocupadas']['total'] += peso
-                tab3605[mun][trablabel]['total'] += peso
-                if freqescola:
-                    tab3605[mun]['total'][escolalabel] += peso
-                    tab3605[mun]['ocupadas']['freq'] += peso
-                    tab3605[mun]['ocupadas'][escolalabel] += peso
-                    tab3605[mun][trablabel]['freq'] += peso
-                    tab3605[mun][trablabel][escolalabel] += peso
-                else:
-                    tab3605[mun]['ocupadas']['naofreq'] += peso
-                    tab3605[mun][trablabel]['naofreq'] += peso
-            else:
-                tab3605[mun]['naoocupadas']['total'] += peso
-                if freqescola:
-                    tab3605[mun]['total'][escolalabel] += peso
-                    tab3605[mun]['naoocupadas']['freq'] += peso
-                    tab3605[mun]['naoocupadas'][escolalabel] += peso
-                else:
-                    tab3605[mun]['naoocupadas']['naofreq'] += peso
+            freqescola.append('total')
+            freqtrab.append('total')
+            tab3605.loc[(tab3605.local==mun) & (tab3605.trab.isin(freqtrab)), freqescola] += peso
                 
 
     escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais)
