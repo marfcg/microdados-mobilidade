@@ -191,7 +191,7 @@ def main(fdict,fdados):
     
 
     # Levanta informacao sobre posicao das variaveis de interesse:
-    ponteiros = read_dicionario(fdict,varlist.keys())
+    ponteiros = read_dicionario(fdict, varlist.keys())
 
     # Altera chaves para simplificar:
     for key, value in varlist.iteritems():
