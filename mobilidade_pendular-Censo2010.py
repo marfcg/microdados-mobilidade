@@ -11,7 +11,11 @@ from collections import defaultdict
 import numpy as np
 import sys
 import csv
-
+import logging
+logger = logging.getLogger('root')
+FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
+logging.basicConfig(format=FORMAT)
+logger.setLevel(logging.DEBUG)
 
 def read_dicionario(fname,var):
     # Leitura do dicionario de posicao das variaveis no arquivo de microdados
@@ -39,6 +43,7 @@ def read_dicionario(fname,var):
                                      'FATIADEC':sdec}
             
     fin.close()
+
     return ponteiros
 
 ##########################################################
@@ -46,7 +51,7 @@ def read_dicionario(fname,var):
 def read_municipio():
     # Leitura da tabela de municipios e codigos de deslocamento
 
-    fin = open('migracao_e_deslocamento_municipios-2010.csv', 'r')
+    fin = open('data/migracao_e_deslocamento_municipios-2010.csv', 'r')
     fin.next()
     fin.next()
 
@@ -58,6 +63,7 @@ def read_municipio():
                                  'UF':row['Unidades da Federação']}
         
     fin.close()
+
     return codmun
 
 ##########################################################
@@ -65,7 +71,7 @@ def read_municipio():
 def read_pais():
     # Leitura da tabela de paises e codigos de deslocamento
 
-    fin = open('migracao_e_deslocamento_paises_estrangeiros-2010.csv')
+    fin = open('data/migracao_e_deslocamento_paises_estrangeiros-2010.csv')
     fin.next()
     fin.next()
     
@@ -77,6 +83,7 @@ def read_pais():
                                  'Continente':row['CONTINENTES']}
         
     fin.close()
+
     return codpais
 
 ##########################################################
@@ -84,7 +91,7 @@ def read_pais():
 def read_uf():
     # Leitura da tabela de UFs e codigo de deslocamento
 
-    fin = open('migracao_e_deslocamento_unidades_da_federacao-2010.csv')
+    fin = open('data/migracao_e_deslocamento_unidades_da_federacao-2010.csv')
     fin.next()
     fin.next()
     
@@ -95,6 +102,7 @@ def read_uf():
         coduf[row['CÓDIGOS']] = row['UNIDADES DA FEDERAÇÃO']
         
     fin.close()
+
     return coduf
 
 ##########################################################
@@ -104,7 +112,7 @@ def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
 
     # Escrever tab3605 (pessoas com 10 anos ou mais, por ocupacao, local de ocupacao,
     # freq escolar e local de estudo)
-    fout = open('tab3605-microdados.csv', 'w')
+    fout = open('data/tab3605-microdados.csv', 'w')
     fieldnames = ['local','trab','total','freq','munres','outromun','outropais','naofreq']
     csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames = fieldnames)
     csvwriter.writeheader()
@@ -114,13 +122,13 @@ def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
         d['local'] = codmun[mun]['Município']
         for trabfn in tab3605[mun].keys():
             d['trab'] = trabfn
-            d.update(tab3605[mun][trabfn])
+            d.update((k,round(v)) for k,v in tab3605[mun][trabfn].items())
             csvwriter.writerow(d)
     fout.close()
 
     # Escrever tab3599 simples (pessoas com ate 9 anos, por frequencia escolar e local
     # de estudo):
-    fout = open('tab3599-microdados.csv', 'w')
+    fout = open('data/tab3599-microdados.csv', 'w')
     fieldnames = ['local','idade','total','freq','munres','outromun','outropais','naofreq']
     csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames = fieldnames)
     csvwriter.writeheader()
@@ -130,12 +138,12 @@ def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
         d['local'] = codmun[mun]['Município']
         for idade in tab3599[mun].keys():
             d['idade'] = idade
-            d.update(tab3599[mun][idade])
+            d.update((k,round(v)) for k,v in tab3599[mun][idade].items())
             csvwriter.writerow(d)
     fout.close()
 
     # Escrever matriz origem-destino por cidade
-    fout = open('matriz-mobilidade-microdados.csv', 'w')
+    fout = open('data/matriz-mobilidade-microdados.csv', 'w')
     fieldnames = ['origem','destino país', 'destino uf', 'destino município','total']
     csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames = fieldnames)
     csvwriter.writeheader()
@@ -161,7 +169,7 @@ def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
             else:
                 d['destino município'] = codmun[dest_mun]['Município']
 
-            d['total'] = peso
+            d['total'] = round(peso)
 
             csvwriter.writerow(d)
     fout.close()
