@@ -34,7 +34,7 @@ from collections import defaultdict
 import numpy as np
 import sys
 import csv
-
+import zipfile
 
 def read_dicionario(var):
     """
@@ -90,7 +90,18 @@ def read_municipio():
                                  'UF': row['Unidades da Federação']}
 
     fin.close()
-    return codmun
+
+    fin = open('data/Brazil-municipalities-2010.csv', 'r')
+
+    frows = csv.DictReader(fin, delimiter=',')
+
+    geocodm = {}
+    for row in frows:
+        geocodm[row['CD_GEOCODM']] = {'Município': row['NM_MUNICIP'],
+                                 'UF': row['SIGLA_ESTADO']}
+
+    fin.close()
+    return codmun, geocodm
 
 
 ##########################################################
@@ -139,29 +150,38 @@ def read_uf():
 
 ##########################################################
 
-def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
+def escrever_tabelas(tab3599, tab3605, origdest, geocodm, codmun, coduf,
+                     codpais, pref):
     """
     Escrever as tabelas relevantes de saida
 
-    # Escrever tab3605 (pessoas com 10 anos ou mais, por ocupacao, local de ocupacao,
-    # freq escolar e local de estudo)
-    :param tab3599:
-    :param tab3605:
-    :param origdest:
-    :param codmun:
-    :param coduf:
-    :param codpais:
+    Escreve a tab3605 (pessoas com 10 anos ou mais, por ocupacao, local de ocupacao,
+    frequencia escolar e local de estudo), tab3599 (pessoas menores de 10 anos, 
+    por frequencia escolar e local de estudo) e matriz de deslocamento.
+
+    :param tab3599:  dict with data on mobility for education, for people 
+                     below 10yo
+    :param tab3605:  dict with data on mobility for education and work,
+                     for people with 10yo or more
+    :param origdest:  dict with aggregated mobility flow by city
+    :param geocodm:  dict with codes for every municipality
+    :param codmun:  dict with mobility code for municipalities
+    :param coduf:  dict with mobility code for states
+    :param codpais:  dict with mobility code for countries
+    :param pref:  preffix for output files
     :return:
     """
 
-    fout = open('data/tab3605-microdados.csv', 'w')
+    # Escreve a tab3605 (pessoas com 10 anos ou mais, por ocupacao, local de ocupacao,
+    # frequencia escolar e local de estudo):
+    fout = open('data/%s-tab3605-microdados.csv' % (pref), 'w')
     fieldnames = ['local', 'trab', 'total', 'freq', 'munres', 'outromun', 'outropais', 'naofreq']
     csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames=fieldnames)
     csvwriter.writeheader()
     d = {fn: '' for fn in fieldnames}
 
     for mun in sorted(tab3605.keys()):
-        d['local'] = codmun[mun]['Município']
+        d['local'] = geocodm[mun]['Município']
         for trabfn in tab3605[mun].keys():
             d['trab'] = trabfn
             d.update((k, round(v)) for k, v in tab3605[mun][trabfn].items())
@@ -170,14 +190,14 @@ def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
 
     # Escrever tab3599 simples (pessoas com ate 9 anos, por frequencia escolar e local
     # de estudo):
-    fout = open('data/tab3599-microdados.csv', 'w')
+    fout = open('data/%s-tab3599-microdados.csv' % (pref), 'w')
     fieldnames = ['local', 'idade', 'total', 'freq', 'munres', 'outromun', 'outropais', 'naofreq']
     csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames=fieldnames)
     csvwriter.writeheader()
     d = {fn: '' for fn in fieldnames}
 
     for mun in sorted(tab3599.keys()):
-        d['local'] = codmun[mun]['Município']
+        d['local'] = geocodm[mun]['Município']
         for idade in tab3599[mun].keys():
             d['idade'] = idade
             d.update((k, round(v)) for k, v in tab3599[mun][idade].items())
@@ -185,13 +205,13 @@ def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
     fout.close()
 
     # Escrever matriz origem-destino por cidade
-    fout = open('data/matriz-mobilidade-microdados.csv', 'w')
+    fout = open('data/%s-matriz-mobilidade-microdados.csv' % (pref), 'w')
     fieldnames = ['origem', 'destino país', 'destino uf', 'destino município', 'total']
     csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames=fieldnames)
     csvwriter.writeheader()
     d = {fn: '' for fn in fieldnames}
     for mun in sorted(origdest.keys()):
-        d['origem'] = codmun[mun]['Município']
+        d['origem'] = geocodm[mun]['Município']
 
         for dest, peso in sorted(origdest[mun].items()):
             dest_pais = dest[0:7]
@@ -206,10 +226,18 @@ def escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais):
                 d['destino uf'] = 'Em Branco'
             else:
                 d['destino uf'] = coduf[dest_uf]
-            if dest_mun not in codmun:
-                d['destino município'] = 'Em Branco'
+                
+            # codmun table from IBGE does not have all municipalities
+            # but have special descriptors for missing data
+            # If the code does represent a municipality, it matches
+            # the entry in geocodm.
+            if dest_mun not in geocodm:
+                if dest_mun in codmun: 
+                    d['destino município'] = codmun[dest_mun]['Município']
+                else:
+                    d['destino município'] = 'Em Branco'
             else:
-                d['destino município'] = codmun[dest_mun]['Município']
+                d['destino município'] = geocodm[dest_mun]['Município']
 
             d['total'] = round(peso)
 
@@ -254,7 +282,7 @@ def main(fdados):
         ponteiros[value] = ponteiros.pop(key)
 
     # Levanta dicionarios de codigos de localizacao:
-    codmun = read_municipio()
+    codmun, geocodm = read_municipio()
     coduf = read_uf()
     codpais = read_pais()
 
@@ -264,11 +292,15 @@ def main(fdados):
     tab3605 = {}
     tab3599 = {}
 
-    for cod in codmun:
+    if fdados.split('.')[-1] == 'zip':
+        pref = fdados.split('/')[-1].split('.')[0]
+    else:
+        pref = fdados.split('/')[-1].split('.')[0].split('Amostra_Pessoas_')[-1]
 
-        if cod[0:2] != '33' or cod[2:] == '99999':
+    for cod in geocodm:
+        if geocodm[cod]['UF'] != pref[0:2] and cod[0:2] != pref:
             continue
-
+            
         pop_mun[cod] = {'total': 0,
                         'fixa': 0,
                         'movel': 0}
@@ -308,7 +340,20 @@ def main(fdados):
     tagescola = {'1': 'munres', '2': 'outromun', '3': 'outropais'}
     tagtrab = {'1': 'munres', '2': 'munres', '3': 'outromun', '4': 'outropais', '5': 'variosmun'}
 
-    fin = open(fdados, 'r')
+    
+    # Check wether the input is a zip file.
+    # If so, assumes that it is the regular state microdata from IBGE
+    # and crawls to the necessary file inside it
+    
+    if fdados.split('.')[-1] == "zip":
+        fzip = zipfile.ZipFile(fdados, 'r')
+        for fname in fzip.namelist():
+            if pref+"/Pessoas/Amostra_Pessoas_" in fname:
+                fin = fzip.open(fname)
+                break
+    else:
+        fin = open(fdados, 'r')
+
     for line in fin:
 
         freqescola = False
@@ -435,7 +480,8 @@ def main(fdados):
                 else:
                     tab3605[mun]['naoocupadas']['naofreq'] += peso
 
-    escrever_tabelas(tab3599, tab3605, origdest, codmun, coduf, codpais)
+    escrever_tabelas(tab3599, tab3605, origdest, geocodm, codmun, coduf,
+                     codpais, pref)
 
 
 if __name__ == '__main__':
