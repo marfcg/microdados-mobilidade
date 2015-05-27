@@ -10,6 +10,8 @@ Arquivos necessários:
 ./data/migracao_e_deslocamento_unidades_da_federacao-2010.csv
 ./data/migracao_e_deslocamento_paises_estrangeiros-2010.csv
 ./data/Layout_microdados_Amosra-pessoa.csv
+./data/Brazil-municipalities-2010.csv
+./data/Fracoes.csv
 
 Dados de entrada:
 Caminho para o arquivo com os microdados de pessoas
@@ -98,9 +100,21 @@ def read_municipio():
     geocodm = {}
     for row in frows:
         geocodm[row['CD_GEOCODM']] = {'Município': row['NM_MUNICIP'],
-                                 'UF': row['SIGLA_ESTADO']}
+                                      'UF': row['SIGLA_ESTADO'], 
+                                      'Pop': int(row['POPULATION'])}
 
     fin.close()
+
+    fin = open('data/Fracoes.csv', 'r')
+
+    frows = csv.DictReader(fin, delimiter=',')
+
+    for row in frows:
+        if row['Código'] in geocodm:
+            geocodm[row['Código']]['Fracao'] = .01*float(row['Fração_efetiva'])
+
+    fin.close()
+
     return codmun, geocodm
 
 
@@ -198,7 +212,7 @@ def escrever_tabelas(tab3599, tab3605, origdest, geocodm, codmun, coduf,
 
     for mun in sorted(tab3599.keys()):
         d['local'] = geocodm[mun]['Município']
-        for idade in tab3599[mun].keys():
+        for idade in sorted(tab3599[mun].keys()):
             d['idade'] = idade
             d.update((k, round(v)) for k, v in tab3599[mun][idade].items())
             csvwriter.writerow(d)
@@ -206,12 +220,12 @@ def escrever_tabelas(tab3599, tab3605, origdest, geocodm, codmun, coduf,
 
     # Escrever matriz origem-destino por cidade
     fout = open('data/%s-matriz-mobilidade-microdados.csv' % (pref), 'w')
-    fieldnames = ['origem', 'destino país', 'destino uf', 'destino município', 'total']
+    fieldnames = ['Origem', 'Destino país', 'Destino UF', 'Destino município', 'Total', 'Erro padrão']
     csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames=fieldnames)
     csvwriter.writeheader()
     d = {fn: '' for fn in fieldnames}
     for mun in sorted(origdest.keys()):
-        d['origem'] = geocodm[mun]['Município']
+        d['Origem'] = geocodm[mun]['Município']
 
         for dest, peso in sorted(origdest[mun].items()):
             dest_pais = dest[0:7]
@@ -219,13 +233,13 @@ def escrever_tabelas(tab3599, tab3605, origdest, geocodm, codmun, coduf,
             dest_mun = dest[14:21]
 
             if dest_pais not in codpais:
-                d['destino país'] = 'Em Branco'
+                d['Destino país'] = 'Em Branco'
             else:
-                d['destino país'] = codpais[dest_pais]['País']
+                d['Destino país'] = codpais[dest_pais]['País']
             if dest_uf not in coduf:
-                d['destino uf'] = 'Em Branco'
+                d['Destino UF'] = 'Em Branco'
             else:
-                d['destino uf'] = coduf[dest_uf]
+                d['Destino UF'] = coduf[dest_uf]
                 
             # codmun table from IBGE does not have all municipalities
             # but have special descriptors for missing data
@@ -233,13 +247,18 @@ def escrever_tabelas(tab3599, tab3605, origdest, geocodm, codmun, coduf,
             # the entry in geocodm.
             if dest_mun not in geocodm:
                 if dest_mun in codmun: 
-                    d['destino município'] = codmun[dest_mun]['Município']
+                    d['Destino município'] = codmun[dest_mun]['Município']
                 else:
-                    d['destino município'] = 'Em Branco'
+                    d['Destino município'] = 'Em Branco'
             else:
-                d['destino município'] = geocodm[dest_mun]['Município']
+                d['Destino município'] = geocodm[dest_mun]['Município']
 
-            d['total'] = round(peso)
+            d['Total'] = int(round(peso))
+
+            frac = geocodm[mun]['Fracao']
+            pop = geocodm[mun]['Pop']
+            d['Erro padrão'] = int(round(np.sqrt((1-frac) * peso * (pop-peso) / 
+                                              (pop*frac-1))))
 
             csvwriter.writerow(d)
     fout.close()
@@ -433,7 +452,7 @@ def main(fdados):
         # Incrementa os valores das tabelas:
 
         # Destino:
-        if trab_res or escola_res:
+        if trab_res and escola_res:
             pop_mun[mun]['fixa'] += peso
         else:
             pop_mun[mun]['movel'] += peso
