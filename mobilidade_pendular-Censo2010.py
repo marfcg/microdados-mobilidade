@@ -2,32 +2,32 @@
 # -*- coding: utf-8 -*-
 
 """
-Script para extração da matriz de mobilidade a partir
-dos microdados do Censo 2010.
+Script for extraction of mobility matrix from Brazilian
+2010 Census microdata
 
-Arquivos necessários:
-./data/migracao_e_deslocamento_municipios-2010.csv
-./data/migracao_e_deslocamento_unidades_da_federacao-2010.csv
-./data/migracao_e_deslocamento_paises_estrangeiros-2010.csv
+Necessary files:
+./data/migration_and_movement_municipalities-2010.csv
+./data/migration_and_movement_federation_units-2010.csv
+./data/migration_and_movement_foreign_countries-2010.csv
 ./data/Layout_microdados_Amosra-pessoa.csv
 ./data/Brazil-municipalities-2010.csv
-./data/Fracoes.csv
+./data/Fractions.csv
 
-Dados de entrada:
-Caminho para o arquivo com os microdados de pessoas
+Usage:
+python mobilidade_pendular-Censo2010.py <path to microdata file>
 
-Uso:
-python mobilidade_pendular-Censo2010.py <caminho para microdados>
+Input:
+Path to file with microdata related to people.
 
 Ex.:
-python mobilidade_pendular-Censo2010.py data/Amostra_Pessoas_33.txt
+python pendular_mobility-Censo2010.py data/Amostra_Pessoas_33.txt
 
-Saida:
-./data/tab3605-microdados.csv  - Tabela similar àquela obtida no SIDRA
-./data/tab3599-microdados.csv  - Tabela similar àquela obtida no SIDRA
-./data/matriz-mobilidade-microdados.csv  - Matriz de mobilidade
+Output:
+./data/tab3605-microdata.csv  - SIDRA-like table
+./data/tab3599-microdata.csv  - SIDRA-like table
+./data/mobility-matrix-microdata.csv  - Mobility matrix
 
-Código desenvolvido por 
+Code developed by:
 Marcelo F C Gomes
 marfcg <at> gmail <dot> com
 """
@@ -38,9 +38,9 @@ import sys
 import csv
 import zipfile
 
-def read_dicionario(var):
+def read_dictionary(var):
     """
-    Leitura do dicionario de posicao das variaveis no arquivo de microdados
+    Read variables position dictionary
     :param fname:
     :param var:
     :return:
@@ -50,37 +50,35 @@ def read_dicionario(var):
     fin.next()
     frows = csv.DictReader(fin, delimiter=',')
 
-    ponteiros = {key: {} for key in var}
+    marker = {key: {} for key in var}
     for row in frows:
         if row['VAR'] in var:
-            # Posicoes reduzidas em uma unidade por conta da estrutura
-            # posicional do Python, que comeca em 0 e nao em 1
+            # Positions reduced by 1, for python compatibility
             pi = int(row['POSIÇÃO INICIAL']) - 1
             sint = slice(pi, pi + int(row['INT']))
             if row['DEC'] == '':
                 sdec = ''
             else:
-                # slice(a,b) vai de a até a posicao b-1
                 pf = int(row['POSIÇÃO FINAL'])
                 sdec = slice(pf - int(row['DEC']), pf)
 
-            ponteiros[row['VAR']] = {'NOME': row['NOME'],
-                                     'FATIA': sint,
-                                     'FATIADEC': sdec}
+            marker[row['VAR']] = {'NAME': row['NOME'],
+                                     'SLICE': sint,
+                                     'SLICEDEC': sdec}
 
     fin.close()
-    return ponteiros
+    return marker
 
 
 ##########################################################
 
-def read_municipio():
+def read_municipality():
     """
-    Leitura da tabela de municipios e codigos de deslocamento
+    Reads tables of municipalities and movement code
     :return:
     """
 
-    fin = open('data/migracao_e_deslocamento_municipios-2010.csv', 'r')
+    fin = open('data/migration_and_movement_municipalities-2010.csv', 'r')
     fin.next()
     fin.next()
 
@@ -88,8 +86,8 @@ def read_municipio():
 
     codmun = {}
     for row in frows:
-        codmun[row['Código']] = {'Município': row['Municípios'],
-                                 'UF': row['Unidades da Federação']}
+        if not row['Código']: continue  # Ignore uninformative rows
+        codmun[row['Código']] = row['Municípios']
 
     fin.close()
 
@@ -99,19 +97,20 @@ def read_municipio():
 
     geocodm = {}
     for row in frows:
-        geocodm[row['CD_GEOCODM']] = {'Município': row['NM_MUNICIP'],
-                                      'UF': row['SIGLA_ESTADO'], 
+        if not any(row.values()): continue  # Ignore empty rows
+        geocodm[row['CD_GEOCODM']] = {'Municipality': row['NM_MUNICIP'],
+                                      'FU': row['SIGLA_ESTADO'], 
                                       'Pop': int(row['POPULATION'])}
 
     fin.close()
 
-    fin = open('data/Fracoes.csv', 'r')
+    fin = open('data/Fractions.csv', 'r')
 
     frows = csv.DictReader(fin, delimiter=',')
 
     for row in frows:
         if row['Código'] in geocodm:
-            geocodm[row['Código']]['Fracao'] = .01*float(row['Fração_efetiva'])
+            geocodm[row['Código']]['Fraction'] = .01*float(row['Fração_efetiva'])
 
     fin.close()
 
@@ -120,58 +119,60 @@ def read_municipio():
 
 ##########################################################
 
-def read_pais():
+def read_cntry():
     """
-    Leitura da tabela de paises e codigos de deslocamento
+    Reads table of countries movement code
     :return:
     """
-    fin = open('data/migracao_e_deslocamento_paises_estrangeiros-2010.csv')
+    fin = open('data/migration_and_movement_foreign_countries-2010.csv')
     fin.next()
     fin.next()
 
     frows = csv.DictReader(fin, delimiter=',')
 
-    codpais = {}
+    codcntry = {}
     for row in frows:
-        codpais[row['CÓDIGOS']] = {'País': row['PAÍSES ESTRANGEIROS'],
-                                   'Continente': row['CONTINENTES']}
+        codcntry[row['CÓDIGOS']] = {'Country': row['PAÍSES ESTRANGEIROS'],
+                                   'Continent': row['CONTINENTES']}
 
     fin.close()
-    return codpais
+    return codcntry
 
 
 ##########################################################
 
-def read_uf():
+def read_fu():
     """
-    Leitura da tabela de UFs e codigo de deslocamento
+    Reads FU movement code
     :return:
     """
 
-    fin = open('data/migracao_e_deslocamento_unidades_da_federacao-2010.csv')
+    fin = open('data/migration_and_movement_federation_units-2010.csv')
     fin.next()
     fin.next()
 
     frows = csv.DictReader(fin, delimiter=',')
 
-    coduf = {}
+    codfu = {}
     for row in frows:
-        coduf[row['CÓDIGOS']] = row['UNIDADES DA FEDERAÇÃO']
+        codfu[row['CÓDIGOS']] = row['UNIDADES DA FEDERAÇÃO']
 
     fin.close()
-    return coduf
+    return codfu
 
 
 ##########################################################
 
-def escrever_tabelas(tab3599, tab3605, origdest, geocodm, codmun, coduf,
-                     codpais, pref):
+def write_tables(tab3599, tab3605, origdest, geocodm, codmun, codfu,
+                     codcntry, pref):
     """
-    Escrever as tabelas relevantes de saida
+    Write relevant output tables:
 
-    Escreve a tab3605 (pessoas com 10 anos ou mais, por ocupacao, local de ocupacao,
-    frequencia escolar e local de estudo), tab3599 (pessoas menores de 10 anos, 
-    por frequencia escolar e local de estudo) e matriz de deslocamento.
+    - Table tab3605: people with 10yo or more by ocupation, location of workplace,
+    school attendance, location of school
+    - Table tab3599: people with less than 10yo by school attendance e location of
+    school
+    - Movement matrix
 
     :param tab3599:  dict with data on mobility for education, for people 
                      below 10yo
@@ -180,66 +181,99 @@ def escrever_tabelas(tab3599, tab3605, origdest, geocodm, codmun, coduf,
     :param origdest:  dict with aggregated mobility flow by city
     :param geocodm:  dict with codes for every municipality
     :param codmun:  dict with mobility code for municipalities
-    :param coduf:  dict with mobility code for states
-    :param codpais:  dict with mobility code for countries
+    :param codfu:  dict with mobility code for states
+    :param codcntry:  dict with mobility code for countries
     :param pref:  preffix for output files
     :return:
     """
 
-    # Escreve a tab3605 (pessoas com 10 anos ou mais, por ocupacao, local de ocupacao,
-    # frequencia escolar e local de estudo):
-    fout = open('data/%s-tab3605-microdados.csv' % (pref), 'w')
-    fieldnames = ['local', 'trab', 'total', 'freq', 'munres', 'outromun', 'outropais', 'naofreq']
+    # Write tab3605:
+    fout = open('data/%s-tab3605-microdata.csv' % (pref), 'w')
+    convtable = {'total':'Total',
+                 'age':'Age',
+                 'freq':'School attendance',
+                 'munres':'School at same municipality',
+                 'othermun':'School at another municipality',
+                 'othercntry':'School at another country',
+                 'nofreq':'Not attending school'}
+    fieldnames = ['Municipality',
+                  'Employment status',
+                  'Total',
+                  'School attendance',
+                  'School at same municipality',
+                  'School at another municipality',
+                  'School at another country',
+                  'Not attending school']
+    workstat = ['Total',
+                'Worker',
+                'Work at same municipality',
+                'Work at other municipality',
+                'Work at other country',
+                'Work at several municipalities',
+                'Non-worker']
     csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames=fieldnames)
     csvwriter.writeheader()
     d = {fn: '' for fn in fieldnames}
 
     for mun in sorted(tab3605.keys()):
-        d['local'] = geocodm[mun]['Município']
-        for trabfn in tab3605[mun].keys():
-            d['trab'] = trabfn
-            d.update((k, round(v)) for k, v in tab3605[mun][trabfn].items())
+        d['Municipality'] = geocodm[mun]['Municipality']
+        for trabfn in workstat:
+            d['Employment status'] = trabfn
+            d.update((convtable[k], int(round(v)))
+                     for k, v in tab3605[mun][trabfn].items())
             csvwriter.writerow(d)
     fout.close()
 
-    # Escrever tab3599 simples (pessoas com ate 9 anos, por frequencia escolar e local
-    # de estudo):
-    fout = open('data/%s-tab3599-microdados.csv' % (pref), 'w')
-    fieldnames = ['local', 'idade', 'total', 'freq', 'munres', 'outromun', 'outropais', 'naofreq']
+    # Write tab3599:
+    fout = open('data/%s-tab3599-microdata.csv' % (pref), 'w')
+    fieldnames = ['Municipality',
+                  'Age',
+                  'Total',
+                  'School attendance',
+                  'School at same municipality',
+                  'School at another municipality',
+                  'School at another country',
+                  'Not attending school']
     csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames=fieldnames)
     csvwriter.writeheader()
     d = {fn: '' for fn in fieldnames}
 
     for mun in sorted(tab3599.keys()):
-        d['local'] = geocodm[mun]['Município']
+        d['Municipality'] = geocodm[mun]['Municipality']
         for idade in sorted(tab3599[mun].keys()):
-            d['idade'] = idade
-            d.update((k, round(v)) for k, v in tab3599[mun][idade].items())
+            d['Age'] = idade
+            d.update((convtable[k], int(round(v)))
+                     for k, v in tab3599[mun][idade].items())
             csvwriter.writerow(d)
     fout.close()
 
-    # Escrever matriz origem-destino por cidade
-    fout = open('data/%s-matriz-mobilidade-microdados.csv' % (pref), 'w')
-    fieldnames = ['Origem', 'Destino país', 'Destino UF', 'Destino município', 'Total', 'Erro padrão']
+    # Write origin-destinatio matrix
+    fout = open('data/%s-mobility-matrix-microdata.csv' % (pref), 'w')
+    fieldnames = ['Origin',
+                  'Destination Country',
+                  'Destination FU',
+                  'Destination Municipality',
+                  'Total',
+                  'Std error']
     csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames=fieldnames)
     csvwriter.writeheader()
     d = {fn: '' for fn in fieldnames}
     for mun in sorted(origdest.keys()):
-        d['Origem'] = geocodm[mun]['Município']
+        d['Origin'] = geocodm[mun]['Municipality']
 
         for dest, peso in sorted(origdest[mun].items()):
-            dest_pais = dest[0:7]
-            dest_uf = dest[7:14]
+            dest_cntry = dest[0:7]
+            dest_fu = dest[7:14]
             dest_mun = dest[14:21]
 
-            if dest_pais not in codpais:
-                d['Destino país'] = 'Em Branco'
+            if dest_cntry not in codcntry:
+                d['Destination Country'] = 'NA'
             else:
-                d['Destino país'] = codpais[dest_pais]['País']
-            if dest_uf not in coduf:
-                d['Destino UF'] = 'Em Branco'
+                d['Destination Country'] = codcntry[dest_cntry]['Country']
+            if dest_fu not in codfu:
+                d['Destination FU'] = 'NA'
             else:
-                d['Destino UF'] = coduf[dest_uf]
+                d['Destination FU'] = codfu[dest_fu]
                 
             # codmun table from IBGE does not have all municipalities
             # but have special descriptors for missing data
@@ -247,17 +281,18 @@ def escrever_tabelas(tab3599, tab3605, origdest, geocodm, codmun, coduf,
             # the entry in geocodm.
             if dest_mun not in geocodm:
                 if dest_mun in codmun: 
-                    d['Destino município'] = codmun[dest_mun]['Município']
+                    d['Destination Municipality'] = codmun[dest_mun]
                 else:
-                    d['Destino município'] = 'Em Branco'
+                    d['Destination Municipality'] = 'NA'
             else:
-                d['Destino município'] = geocodm[dest_mun]['Município']
+                d['Destination Municipality'] = geocodm[dest_mun]['Municipality']
+                d['Destination Country'] = 'Brasil'
 
             d['Total'] = int(round(peso))
 
-            frac = geocodm[mun]['Fracao']
+            frac = geocodm[mun]['Fraction']
             pop = geocodm[mun]['Pop']
-            d['Erro padrão'] = int(round(np.sqrt((1-frac) * peso * (pop-peso) / 
+            d['Std error'] = int(round(np.sqrt((1-frac) * peso * (pop-peso) / 
                                               (pop*frac-1))))
 
             csvwriter.writerow(d)
@@ -266,85 +301,83 @@ def escrever_tabelas(tab3599, tab3605, origdest, geocodm, codmun, coduf,
     return
 
 
-def main(fdados):
+def main(fdata):
     """
-    Faz a leitura do arquivo dos microdados e extrai dados de mobilidade
-    Dados de entrada
-    :param fdados:  # Caminho para o microdado relativo às pessoas
-                    # Amostra_Pessoas_<#UF>.txt
+    Read microdata file and extracts mobility data.
+
+    Input:
+    :param fdata:  # Path to microdata file related to people
+                   # Amostra_Pessoas_<#FU>.txt
     :return:
     """
-    varlist = {'V0001': 'res.uf',  # Código UF
-               'V0002': 'res.mun',  # Código Município
-               'V0010': 'peso',  # Peso amostral
-               'V6036': 'idade',  # Idade em anos
-               'V0628': 'escola',  # Frequenta escola ou creche
-               'V0636': 'escola.local',  # Local da escola
-               'V6362': 'escola.uf',  # UF da escola
-               'V6364': 'escola.mun',  # Municipio da escola
-               'V6366': 'escola.pais',  # Pais da escola
-               'V0660': 'trab.local',  # Local de trabalho
-               'V6602': 'trab.uf',  # UF de trabalho
-               'V6604': 'trab.mun',  # Municipio de trabalho
-               'V6606': 'trab.pais',  # Pais de trabalho
-               'V0661': 'trab.diario',  # Retorna do trabalho para casa diariamente
-               'V0662': 'trab.desloc',  # Tempo habitual de deslocamento
-               'V6920': 'trab.situacao'  # Situacao de ocupacao na semana de referencia
+    varlist = {'V0001': 'res.fu',  # FU code
+               'V0002': 'res.mun',  # Municipality code
+               'V0010': 'weight',  # Sample weight
+               'V6036': 'age',  # Age, in years
+               'V0628': 'school',  # Attends school
+               'V0636': 'school.loc',  # School's location
+               'V6362': 'school.fu',  # School's FU
+               'V6364': 'school.mun',  # School's Municipality
+               'V6366': 'school.cntry',  # School's Country
+               'V0660': 'work.loc',  # Work's location
+               'V6602': 'work.fu',  # Work's FU
+               'V6604': 'work.mun',  # Work's Municipality
+               'V6606': 'work.cntry',  # Work's Country
+               'V0661': 'work.daily',  # Daily return from work
+               'V0662': 'work.desloc',  # Usual time in traffic to work
+               'V6920': 'work.occ'  # Employment status
                }
 
+    # Reads positional information regarding target variables:
+    marker = read_dictionary(varlist.keys())
 
-    # Levanta informacao sobre posicao das variaveis de interesse:
-    ponteiros = read_dicionario(varlist.keys())
-
-    # Altera chaves para simplificar:
+    # Simplify key's name:
     for key, value in varlist.iteritems():
-        ponteiros[value] = ponteiros.pop(key)
+        marker[value] = marker.pop(key)
 
-    # Levanta dicionarios de codigos de localizacao:
-    codmun, geocodm = read_municipio()
-    coduf = read_uf()
-    codpais = read_pais()
+    # Reads dictionaries for location codes:
+    codmun, geocodm = read_municipality()
+    codfu = read_fu()
+    codcntry = read_cntry()
 
-    # Prepara dicionarios de interesse:
+    # Prepare target dictionaries:
     pop_mun = {}
     origdest = {}
     tab3605 = {}
     tab3599 = {}
 
-    if fdados.split('.')[-1] == 'zip':
-        pref = fdados.split('/')[-1].split('.')[0]
+    if fdata.split('.')[-1] == 'zip':
+        pref = fdata.split('/')[-1].split('.')[0]
     else:
-        pref = fdados.split('/')[-1].split('.')[0].split('Amostra_Pessoas_')[-1]
+        pref = fdata.split('/')[-1].split('.')[0].split('Amostra_Pessoas_')[-1]
 
     for cod in geocodm:
-        if geocodm[cod]['UF'] != pref[0:2] and cod[0:2] != pref:
+        if geocodm[cod]['FU'] != pref[0:2] and cod[0:2] != pref:
             continue
             
         pop_mun[cod] = {'total': 0,
-                        'fixa': 0,
-                        'movel': 0}
+                        'fixed': 0,
+                        'mobile': 0}
 
         origdest[cod] = defaultdict(int)
 
-        tab3605[cod] = {'total': {},
-                        'ocupadas': {},
-                        'munres': {},
-                        'munresdom': {},
-                        'munresfora': {},
-                        'outromun': {},
-                        'outropais': {},
-                        'variosmun': {},
-                        'naoocupadas': {}}
+        tab3605[cod] = {'Total': {},
+                        'Worker': {},
+                        'Work at same municipality': {},
+                        'Work at other municipality': {},
+                        'Work at other country': {},
+                        'Work at several municipalities': {},
+                        'Non-worker': {}}
 
         for key in tab3605[cod]:
             tab3605[cod][key] = {'total': 0,
                                  'freq': 0,
                                  'munres': 0,
-                                 'outromun': 0,
-                                 'outropais': 0,
-                                 'naofreq': 0}
+                                 'othermun': 0,
+                                 'othercntry': 0,
+                                 'nofreq': 0}
 
-        tab3599[cod] = {'total': {},
+        tab3599[cod] = {'Total': {},
                         '0-4': {},
                         '5-9': {}}
 
@@ -352,155 +385,161 @@ def main(fdados):
             tab3599[cod][key] = {'total': 0,
                                  'freq': 0,
                                  'munres': 0,
-                                 'outromun': 0,
-                                 'outropais': 0,
-                                 'naofreq': 0}
+                                 'othermun': 0,
+                                 'othercntry': 0,
+                                 'nofreq': 0}
 
-    tagescola = {'1': 'munres', '2': 'outromun', '3': 'outropais'}
-    tagtrab = {'1': 'munres', '2': 'munres', '3': 'outromun', '4': 'outropais', '5': 'variosmun'}
+    tagschool = {'1': 'munres',
+                 '2': 'othermun',
+                 '3': 'othercntry'}
+    tagwork = {'1': 'Work at same municipality',
+               '2': 'Work at same municipality',
+               '3': 'Work at other municipality',
+               '4': 'Work at other country',
+               '5': 'Work at several municipalities'}
 
     
     # Check wether the input is a zip file.
     # If so, assumes that it is the regular state microdata from IBGE
     # and crawls to the necessary file inside it
     
-    if fdados.split('.')[-1] == "zip":
-        fzip = zipfile.ZipFile(fdados, 'r')
+    if fdata.split('.')[-1] == "zip":
+        fzip = zipfile.ZipFile(fdata, 'r')
         for fname in fzip.namelist():
             if pref+"/Pessoas/Amostra_Pessoas_" in fname:
                 fin = fzip.open(fname)
                 break
     else:
-        fin = open(fdados, 'r')
+        fin = open(fdata, 'r')
 
     for line in fin:
 
-        freqescola = False
-        escola_res = True
-        escola_uf = ''
-        escola_mun = ''
-        escola_pais = ''
+        freqschool = False
+        school_res = True
+        school_fu = ''
+        school_mun = ''
+        school_cntry = ''
 
-        freqtrab = False
-        trab_res = True
-        trab_uf = ''
-        trab_mun = ''
-        trab_pais = ''
+        freqwork = False
+        work_res = True
+        work_fu = ''
+        work_mun = ''
+        work_cntry = ''
 
-        # Idade (em anos):
-        idade = int(line[ponteiros['idade']['FATIA']])
+        # Age (in years):
+        age = int(line[marker['age']['SLICE']])
 
-        # Codigo do municipio de residencia:
-        mun = (line[ponteiros['res.uf']['FATIA']] +
-               line[ponteiros['res.mun']['FATIA']])
+        # Municipality of residence's code:
+        mun = (line[marker['res.fu']['SLICE']] +
+               line[marker['res.mun']['SLICE']])
 
-        # Peso individual:
-        peso = np.double(line[ponteiros['peso']['FATIA']] +
+        # Individual weight:
+        peso = np.double(line[marker['weight']['SLICE']] +
                          '.' +
-                         line[ponteiros['peso']['FATIADEC']])
+                         line[marker['weight']['SLICEDEC']])
 
-        # Populacao total do municipio:
+        # Add to municipality population:
         pop_mun[mun]['total'] += peso
 
-        if idade < 5:
-            tab3599[mun]['total']['total'] += peso
+        if age < 5:
+            tab3599[mun]['Total']['total'] += peso
             tab3599[mun]['0-4']['total'] += peso
-            menor = True
-            idadelabel = '0-4'
-        elif idade < 10:
-            tab3599[mun]['total']['total'] += peso
+            underage = True
+            agelabel = '0-4'
+        elif age < 10:
+            tab3599[mun]['Total']['total'] += peso
             tab3599[mun]['5-9']['total'] += peso
-            menor = True
-            idadelabel = '5-9'
+            underage = True
+            agelabel = '5-9'
         else:
-            tab3605[mun]['total']['total'] += peso
-            menor = False
+            tab3605[mun]['Total']['total'] += peso
+            underage = False
 
-        # Verifica se frequenta escola:
-        if int(line[ponteiros['escola']['FATIA']]) < 3:
-            freqescola = True
+        # Check school attendance:
+        if int(line[marker['school']['SLICE']]) < 3:
+            freqschool = True
 
-        escola = line[ponteiros['escola.local']['FATIA']].strip()
-        if escola != '':  # Se nao frequenta, esta variavel esta em branco
-            escolalabel = tagescola[escola]
-            escola = int(escola)
+        school = line[marker['school.loc']['SLICE']].strip()
+        if school != '':  # If not attending school, this variable is blank
+            schoollabel = tagschool[school]
+            school = int(school)
 
-            if escola >= 2:  # Fora do municipio
-                escola_res = False
-                escola_uf = line[ponteiros['escola.uf']['FATIA']]
-                escola_mun = line[ponteiros['escola.mun']['FATIA']]
-                escola_pais = line[ponteiros['escola.pais']['FATIA']]
-                escola_dest = escola_pais + escola_uf + escola_mun
+            if school >= 2:  # Outside municipality of residence
+                school_res = False
+                school_fu = line[marker['school.fu']['SLICE']]
+                school_mun = line[marker['school.mun']['SLICE']]
+                school_cntry = line[marker['school.cntry']['SLICE']]
+                school_dest = school_cntry + school_fu + school_mun
 
-        # Verifica se trabalha:
-        if line[ponteiros['trab.situacao']['FATIA']] == '1':
-            freqtrab = True
+        # Check if worker:
+        if line[marker['work.occ']['SLICE']] == '1':
+            freqwork = True
 
-        trab = line[ponteiros['trab.local']['FATIA']].strip()
+        work = line[marker['work.loc']['SLICE']].strip()
 
-        if trab != '':
-            trablabel = tagtrab[trab]
-            trab = int(trab)
+        if work != '':
+            worklabel = tagwork[work]
+            work = int(work)
 
-            if trab > 2:  # Fora do municipio
-                trab_res = False
-                trab_uf = line[ponteiros['trab.uf']['FATIA']]
-                trab_mun = line[ponteiros['trab.mun']['FATIA']]
-                trab_pais = line[ponteiros['trab.pais']['FATIA']]
-                trab_dest = trab_pais + trab_uf + trab_mun
+            if work > 2:  # Outside municipality of residence
+                work_res = False
+                work_fu = line[marker['work.fu']['SLICE']]
+                work_mun = line[marker['work.mun']['SLICE']]
+                work_cntry = line[marker['work.cntry']['SLICE']]
+                work_dest = work_cntry + work_fu + work_mun
 
-        # Incrementa os valores das tabelas:
+        # Update table values:
 
-        # Destino:
-        if trab_res and escola_res:
-            pop_mun[mun]['fixa'] += peso
+        # Destination:
+        if work_res and school_res:
+            pop_mun[mun]['fixed'] += peso
         else:
-            pop_mun[mun]['movel'] += peso
+            pop_mun[mun]['mobile'] += peso
 
-            if not trab_res:
-                origdest[mun][trab_dest] += peso
+            if not work_res:
+                origdest[mun][work_dest] += peso
             else:
-                origdest[mun][escola_dest] += peso
+                origdest[mun][school_dest] += peso
 
-        # Mobilidade para trabalho e/ou estudo:
-        if menor:
-            if freqescola:
-                tab3599[mun]['total']['freq'] += peso
-                tab3599[mun][idadelabel]['freq'] += peso
-                tab3599[mun]['total'][escolalabel] += peso
-                tab3599[mun][idadelabel][escolalabel] += peso
+        # Mobility for work/study:
+        if underage:
+            if freqschool:
+                tab3599[mun]['Total']['freq'] += peso
+                tab3599[mun][agelabel]['freq'] += peso
+                tab3599[mun]['Total'][schoollabel] += peso
+                tab3599[mun][agelabel][schoollabel] += peso
             else:
-                tab3599[mun]['total']['naofreq'] += peso
-                tab3599[mun][idadelabel]['naofreq'] += peso
+                tab3599[mun]['Total']['nofreq'] += peso
+                tab3599[mun][agelabel]['nofreq'] += peso
         else:
-            if freqescola:
-                tab3605[mun]['total']['freq'] += peso
+            if freqschool:
+                tab3605[mun]['Total']['freq'] += peso
             else:
-                tab3605[mun]['total']['naofreq'] += peso
+                tab3605[mun]['Total']['nofreq'] += peso
 
-            if freqtrab:
-                tab3605[mun]['ocupadas']['total'] += peso
-                tab3605[mun][trablabel]['total'] += peso
-                if freqescola:
-                    tab3605[mun]['total'][escolalabel] += peso
-                    tab3605[mun]['ocupadas']['freq'] += peso
-                    tab3605[mun]['ocupadas'][escolalabel] += peso
-                    tab3605[mun][trablabel]['freq'] += peso
-                    tab3605[mun][trablabel][escolalabel] += peso
+            if freqwork:
+                tab3605[mun]['Worker']['total'] += peso
+                tab3605[mun][worklabel]['total'] += peso
+                if freqschool:
+                    tab3605[mun]['Total'][schoollabel] += peso
+                    tab3605[mun]['Worker']['freq'] += peso
+                    tab3605[mun]['Worker'][schoollabel] += peso
+                    tab3605[mun][worklabel]['freq'] += peso
+                    tab3605[mun][worklabel][schoollabel] += peso
                 else:
-                    tab3605[mun]['ocupadas']['naofreq'] += peso
-                    tab3605[mun][trablabel]['naofreq'] += peso
+                    tab3605[mun]['Worker']['nofreq'] += peso
+                    tab3605[mun][worklabel]['nofreq'] += peso
             else:
-                tab3605[mun]['naoocupadas']['total'] += peso
-                if freqescola:
-                    tab3605[mun]['total'][escolalabel] += peso
-                    tab3605[mun]['naoocupadas']['freq'] += peso
-                    tab3605[mun]['naoocupadas'][escolalabel] += peso
+                tab3605[mun]['Non-worker']['total'] += peso
+                if freqschool:
+                    tab3605[mun]['Total'][schoollabel] += peso
+                    tab3605[mun]['Non-worker']['freq'] += peso
+                    tab3605[mun]['Non-worker'][schoollabel] += peso
                 else:
-                    tab3605[mun]['naoocupadas']['naofreq'] += peso
+                    tab3605[mun]['Non-worker']['nofreq'] += peso
 
-    escrever_tabelas(tab3599, tab3605, origdest, geocodm, codmun, coduf,
-                     codpais, pref)
+    write_tables(tab3599, tab3605, origdest, geocodm, codmun, codfu,
+                     codcntry, pref)
 
 
 if __name__ == '__main__':
