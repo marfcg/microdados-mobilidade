@@ -249,22 +249,36 @@ def write_tables(tab3599, tab3605, origdest, geocodm, codmun, codfu,
 
     # Write origin-destinatio matrix
     fout = open('data/%s-mobility-matrix-microdata.csv' % (pref), 'w')
-    fieldnames = ['Origin',
+    fieldnames = ['Origin Country',
+                  'Origin FU',
+                  'Origin Municipality',
+                  'Population',
                   'Destination Country',
                   'Destination FU',
                   'Destination Municipality',
                   'Total',
-                  'Std error']
+                  'Std error',
+                  'Density']
     csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames=fieldnames)
     csvwriter.writeheader()
     d = {fn: '' for fn in fieldnames}
     for mun in sorted(origdest.keys()):
-        d['Origin'] = geocodm[mun]['Municipality']
+        d['Origin Country'] = 'BRASIL'
+        d['Origin FU'] = geocodm[mun]['FU']
+        d['Origin Municipality'] = geocodm[mun]['Municipality']
+        
+        pop = geocodm[mun]['Pop']
+        d['Population'] = pop
 
         for dest, peso in sorted(origdest[mun].items()):
-            dest_cntry = dest[0:7]
-            dest_fu = dest[7:14]
-            dest_mun = dest[14:21]
+            if dest == 'SEVERAL':
+                dest_cntry = 'NA'
+                dest_fu = 'NA'
+                dest_mun = 'SEVERAL'
+            else:
+                dest_cntry = dest[0:7]
+                dest_fu = dest[7:14]
+                dest_mun = dest[14:21]
 
             if dest_cntry not in codcntry:
                 d['Destination Country'] = 'NA'
@@ -282,18 +296,23 @@ def write_tables(tab3599, tab3605, origdest, geocodm, codmun, codfu,
             if dest_mun not in geocodm:
                 if dest_mun in codmun: 
                     d['Destination Municipality'] = codmun[dest_mun]
+                    if dest_mun != '8888888':
+                        d['Destination Country'] = 'BRASIL'
                 else:
-                    d['Destination Municipality'] = 'NA'
+                    if dest_mun == 'SEVERAL':
+                        d['Destination Municipality'] = 'MULTIPLE DESTINATIONS'
+                    else:
+                        d['Destination Municipality'] = 'NA'
+                        
             else:
                 d['Destination Municipality'] = geocodm[dest_mun]['Municipality']
-                d['Destination Country'] = 'Brasil'
-
-            d['Total'] = int(round(peso))
+                d['Destination Country'] = 'BRASIL'
 
             frac = geocodm[mun]['Fraction']
-            pop = geocodm[mun]['Pop']
+            d['Total'] = int(round(peso))
             d['Std error'] = int(round(np.sqrt((1-frac) * peso * (pop-peso) / 
                                               (pop*frac-1))))
+            d['Density'] = np.float64(peso/pop)
 
             csvwriter.writerow(d)
     fout.close()
@@ -412,7 +431,9 @@ def main(fdata):
     else:
         fin = open(fdata, 'r')
 
+    count = 0
     for line in fin:
+        count += 1
 
         freqschool = False
         school_res = True
@@ -487,6 +508,8 @@ def main(fdata):
                 work_mun = line[marker['work.mun']['SLICE']]
                 work_cntry = line[marker['work.cntry']['SLICE']]
                 work_dest = work_cntry + work_fu + work_mun
+                if work == 5 and work_dest.strip() == '':
+                    work_dest = 'SEVERAL'
 
         # Update table values:
 
