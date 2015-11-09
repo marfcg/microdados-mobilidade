@@ -301,6 +301,9 @@ def write_tables(tab3599, tab3605, origdest, geocodm, codmun, codfu,
                 else:
                     if dest_mun == 'SEVERAL':
                         d['Destination Municipality'] = 'MULTIPLE DESTINATIONS'
+                    elif dest_fu == '9900000':
+                        d['Destination Municipality'] = 'NA'
+                        d['Destination Country'] = 'BRASIL'
                     else:
                         d['Destination Municipality'] = 'NA'
                         
