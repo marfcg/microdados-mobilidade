@@ -1,5 +1,6 @@
-#!/usr/bin/env python
+# !/usr/bin/env python3
 # -*- coding: utf-8 -*-
+__author__ = 'Marcelo Ferreira da Costa Gomes'
 
 """
 Script for extraction of mobility matrix from Brazilian
@@ -38,10 +39,10 @@ import sys
 import csv
 import zipfile
 
+
 def read_dictionary(var):
     """
     Read variables position dictionary
-    :param fname:
     :param var:
     :return:
     """
@@ -63,8 +64,8 @@ def read_dictionary(var):
                 sdec = slice(pf - int(row['DEC']), pf)
 
             marker[row['VAR']] = {'NAME': row['NOME'],
-                                     'SLICE': sint,
-                                     'SLICEDEC': sdec}
+                                  'SLICE': sint,
+                                  'SLICEDEC': sdec}
 
     fin.close()
     return marker
@@ -99,7 +100,7 @@ def read_municipality():
     for row in frows:
         if not any(row.values()): continue  # Ignore empty rows
         geocodm[row['CD_GEOCODM']] = {'Municipality': row['NM_MUNICIP'],
-                                      'FU': row['SIGLA_ESTADO'], 
+                                      'FU': row['SIGLA_ESTADO'],
                                       'Pop': int(row['POPULATION'])}
 
     fin.close()
@@ -110,7 +111,7 @@ def read_municipality():
 
     for row in frows:
         if row['Código'] in geocodm:
-            geocodm[row['Código']]['Fraction'] = .01*float(row['Fração_efetiva'])
+            geocodm[row['Código']]['Fraction'] = .01 * float(row['Fração_efetiva'])
 
     fin.close()
 
@@ -133,7 +134,7 @@ def read_cntry():
     codcntry = {}
     for row in frows:
         codcntry[row['CÓDIGOS']] = {'Country': row['PAÍSES ESTRANGEIROS'],
-                                   'Continent': row['CONTINENTES']}
+                                    'Continent': row['CONTINENTES']}
 
     fin.close()
     return codcntry
@@ -163,8 +164,8 @@ def read_fu():
 
 ##########################################################
 
-def write_tables(tab3599, tab3605, origdest, geocodm, codmun, codfu,
-                     codcntry, pref):
+def write_tables(tab3599, tab3605, origdest, errdest, geocodm, codmun, codfu,
+                 codcntry, pref):
     """
     Write relevant output tables:
 
@@ -179,6 +180,7 @@ def write_tables(tab3599, tab3605, origdest, geocodm, codmun, codfu,
     :param tab3605:  dict with data on mobility for education and work,
                      for people with 10yo or more
     :param origdest:  dict with aggregated mobility flow by city
+    :param errdest:  dict with error factor for each pair orig-dest
     :param geocodm:  dict with codes for every municipality
     :param codmun:  dict with mobility code for municipalities
     :param codfu:  dict with mobility code for states
@@ -188,14 +190,14 @@ def write_tables(tab3599, tab3605, origdest, geocodm, codmun, codfu,
     """
 
     # Write tab3605:
-    fout = open('data/%s-tab3605-microdata.csv' % (pref), 'w')
-    convtable = {'total':'Total',
-                 'age':'Age',
-                 'freq':'School attendance',
-                 'munres':'School at same municipality',
-                 'othermun':'School at another municipality',
-                 'othercntry':'School at another country',
-                 'nofreq':'Not attending school'}
+    fout = open('data/%s-tab3605-microdata.csv' % pref, 'w')
+    convtable = {'total': 'Total',
+                 'age': 'Age',
+                 'freq': 'School attendance',
+                 'munres': 'School at same municipality',
+                 'othermun': 'School at another municipality',
+                 'othercntry': 'School at another country',
+                 'nofreq': 'Not attending school'}
     fieldnames = ['Municipality',
                   'Employment status',
                   'Total',
@@ -225,7 +227,7 @@ def write_tables(tab3599, tab3605, origdest, geocodm, codmun, codfu,
     fout.close()
 
     # Write tab3599:
-    fout = open('data/%s-tab3599-microdata.csv' % (pref), 'w')
+    fout = open('data/%s-tab3599-microdata.csv' % pref, 'w')
     fieldnames = ['Municipality',
                   'Age',
                   'Total',
@@ -248,16 +250,19 @@ def write_tables(tab3599, tab3605, origdest, geocodm, codmun, codfu,
     fout.close()
 
     # Write origin-destinatio matrix
-    fout = open('data/%s-mobility-matrix-microdata.csv' % (pref), 'w')
+    fout = open('data/%s-mobility-matrix-microdata.csv' % pref, 'w')
     fieldnames = ['Origin Country',
                   'Origin FU',
                   'Origin Municipality',
+                  'Origin geocode',
                   'Population',
                   'Destination Country',
                   'Destination FU',
                   'Destination Municipality',
+                  'Destination geocode',
                   'Total',
                   'Std error',
+                  'Error factor',
                   'Density']
     csvwriter = csv.DictWriter(fout, delimiter=',', fieldnames=fieldnames)
     csvwriter.writeheader()
@@ -266,7 +271,7 @@ def write_tables(tab3599, tab3605, origdest, geocodm, codmun, codfu,
         d['Origin Country'] = 'BRASIL'
         d['Origin FU'] = geocodm[mun]['FU']
         d['Origin Municipality'] = geocodm[mun]['Municipality']
-        
+
         pop = geocodm[mun]['Pop']
         d['Population'] = pop
 
@@ -288,13 +293,13 @@ def write_tables(tab3599, tab3605, origdest, geocodm, codmun, codfu,
                 d['Destination FU'] = 'NA'
             else:
                 d['Destination FU'] = codfu[dest_fu]
-                
+
             # codmun table from IBGE does not have all municipalities
             # but have special descriptors for missing data
             # If the code does represent a municipality, it matches
             # the entry in geocodm.
             if dest_mun not in geocodm:
-                if dest_mun in codmun: 
+                if dest_mun in codmun:
                     d['Destination Municipality'] = codmun[dest_mun]
                     if dest_mun != '8888888':
                         d['Destination Country'] = 'BRASIL'
@@ -306,17 +311,20 @@ def write_tables(tab3599, tab3605, origdest, geocodm, codmun, codfu,
                         d['Destination Country'] = 'BRASIL'
                     else:
                         d['Destination Municipality'] = 'NA'
-                        
+
             else:
                 d['Destination Municipality'] = geocodm[dest_mun]['Municipality']
                 d['Destination Country'] = 'BRASIL'
 
             frac = geocodm[mun]['Fraction']
-            d['Total'] = int(round(peso))
-            d['Std error'] = int(round(np.sqrt((1-frac) * peso * (pop-peso) / 
-                                              (pop*frac-1))))
-            d['Density'] = np.float64(peso/pop)
-
+            d['Total'] = peso
+            d['Std error'] = (np.sqrt((1 - frac) * peso * (pop - peso) /
+                                      (pop * frac - 1)))
+            # This factor is used for correct calculation of the error when aggregating destinations:
+            d['Error factor'] = np.sqrt((1 - frac) * errdest[mun][dest] / (pop * frac - 1))
+            d['Density'] = np.float64(peso / pop)
+            d['Origin geocode'] = mun
+            d['Destination geocode'] = dest_mun
             csvwriter.writerow(d)
     fout.close()
 
@@ -365,6 +373,7 @@ def main(fdata):
     # Prepare target dictionaries:
     pop_mun = {}
     origdest = {}
+    errdest = {}
     tab3605 = {}
     tab3599 = {}
 
@@ -376,12 +385,13 @@ def main(fdata):
     for cod in geocodm:
         if geocodm[cod]['FU'] != pref[0:2] and cod[0:2] != pref:
             continue
-            
+
         pop_mun[cod] = {'total': 0,
                         'fixed': 0,
                         'mobile': 0}
 
         origdest[cod] = defaultdict(int)
+        errdest[cod] = defaultdict(int)
 
         tab3605[cod] = {'Total': {},
                         'Worker': {},
@@ -420,15 +430,14 @@ def main(fdata):
                '4': 'Work at other country',
                '5': 'Work at several municipalities'}
 
-    
     # Check wether the input is a zip file.
     # If so, assumes that it is the regular state microdata from IBGE
     # and crawls to the necessary file inside it
-    
+
     if fdata.split('.')[-1] == "zip":
         fzip = zipfile.ZipFile(fdata, 'r')
         for fname in fzip.namelist():
-            if pref+"/Pessoas/Amostra_Pessoas_" in fname:
+            if pref + "/Pessoas/Amostra_Pessoas_" in fname:
                 fin = fzip.open(fname)
                 break
     else:
@@ -440,15 +449,9 @@ def main(fdata):
 
         freqschool = False
         school_res = True
-        school_fu = ''
-        school_mun = ''
-        school_cntry = ''
 
         freqwork = False
         work_res = True
-        work_fu = ''
-        work_mun = ''
-        work_cntry = ''
 
         # Age (in years):
         age = int(line[marker['age']['SLICE']])
@@ -517,6 +520,7 @@ def main(fdata):
         # Update table values:
 
         # Destination:
+        pop = geocodm[mun]['Pop']
         if work_res and school_res:
             pop_mun[mun]['fixed'] += peso
         else:
@@ -524,8 +528,10 @@ def main(fdata):
 
             if not work_res:
                 origdest[mun][work_dest] += peso
+                errdest[mun][work_dest] += peso * (pop - peso)
             else:
                 origdest[mun][school_dest] += peso
+                errdest[mun][school_dest] += peso * (pop - peso)
 
         # Mobility for work/study:
         if underage:
@@ -564,8 +570,8 @@ def main(fdata):
                 else:
                     tab3605[mun]['Non-worker']['nofreq'] += peso
 
-    write_tables(tab3599, tab3605, origdest, geocodm, codmun, codfu,
-                     codcntry, pref)
+    write_tables(tab3599, tab3605, origdest, errdest, geocodm, codmun, codfu,
+                 codcntry, pref)
 
 
 if __name__ == '__main__':
