@@ -223,13 +223,19 @@ def main(ufrequest=None):
         ufrequest = [k for k in ufacron2name]
         ufrequest.extend(['SP1', 'SP2-RM'])
         ufrequest.remove('SP')
+        fout = '../data/all_FUs-redistributed_mobility_matrix.csv'
+    else:
+        if 'SP' in ufrequest:
+            ufrequest.extend(['SP1', 'SP2-RM'])
+            ufrequest.remove('SP')
+        fout = '../data/%s-redistributed_mobility_matrix.csv' % ('-'.join(ufrequest))
 
     # Read and redistribute the unknowns:
     dfmobility, dfpop = readtable(ufrequest)
     dfmobility_clean = cleantable(dfmobility)
 
     # Write redistributed matrix to file:
-    dfmobility_clean.to_csv('../data/redistributed_mobility_matrix.csv', index=False)
+    dfmobility_clean.to_csv(fout, index=False)
 
     return
 
@@ -239,6 +245,6 @@ if __name__ == '__main__':
     if len(sys.argv) == 1:
         ufrequested = ['all']
     else:
-        ufrequested = sys.argv[1:]
+        ufrequested = [v for v in sys.argv[1:]]
 
     main(ufrequested)
