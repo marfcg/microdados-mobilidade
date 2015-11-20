@@ -101,7 +101,7 @@ def gravmodel(dfin, beta=1, gamma=2):
         norm = np.float64(dfgrav.grav[dfgrav.src == src].sum())
         dfgrav.loc[dfgrav.src == src, 'grav'] *= dfgrav.Ti[dfgrav.src == src] / norm
 
-    dfgrav = dfgrav[dfgrav.grav > 0]
+    dfgrav = dfgrav[(dfgrav.grav > 0) & (dfgrav.flow > 0)]
     return dfgrav
 
 
@@ -135,7 +135,7 @@ def radmodel(dfin):
             #print(rij,mi,mj,sij,norm)
             dfrad.loc[(dfrad.src == src) & (dfrad.tgt == tgt), 'rad'] *= np.float64(1) / norm
 
-    dfrad = dfrad[dfrad.rad > 0]
+    dfrad = dfrad[(dfrad.rad > 0) & (dfrad.flow > 0)]
     return dfrad
 
 
