@@ -63,12 +63,13 @@ def readflow(srcgeocodes, tgtgeocodes, fname=None):
         dfflow = pd.read_csv(fname)
 
     # Discard all unnecessary data:
-    dfflow.rename(columns={'Origin Municipality': 'srcname', 'Origin geocode': 'srcgeocode',
+    dfflow.rename(columns={'Origin Municipality': 'srcname', 'Origin geocode': 'srcgeocode', 'Origin FU': 'srcfu',
                            'Destination Municipality': 'tgtname', 'Destination geocode': 'tgtgeocode',
-                           'Population': 'srcpop', 'Total': 'flow', 'Std error': 'error'}, inplace=True)
-
+                           'Destination FU': 'tgtfu', 'Population': 'srcpop', 'Total': 'flow', 'Std error': 'error'},
+                  inplace=True)
     # Keep only Brazilian destinations
     dfflow = dfflow[dfflow['Destination Country'] == 'BRASIL']
+    dfflow = dfflow[['srcname', 'srcgeocode', 'srcfu', 'tgtname', 'tgtgeocode', 'tgtfu', 'srcpop', 'flow', 'error']]
     dfflow.tgtgeocode = dfflow.tgtgeocode.astype(int)
     dfflow = dfflow[(dfflow.srcgeocode.isin(srcgeocodes)) & (dfflow.tgtgeocode.isin(tgtgeocodes))]
 
@@ -127,8 +128,11 @@ def radmodel(dfin):
         for tgt in tgtlist:
             rij = np.float64(dfrad.dist[(dfrad.src == src) & (dfrad.tgt == tgt)])
             sij = np.float64(dfrad.tgtpop[(dfrad.src == src) & (dfrad.dist < rij)].sum())
-            mj = np.float64(dfrad.srcpop[dfrad.src == tgt].unique())
+            if np.isnan(sij):
+                sij = 0
+            mj = np.float64(dfrad.tgtpop[dfrad.tgt == tgt].unique())
             norm = (mi + sij) * (mi + mj + sij)
+            #print(rij,mi,mj,sij,norm)
             dfrad.loc[(dfrad.src == src) & (dfrad.tgt == tgt), 'rad'] *= np.float64(1) / norm
 
     dfrad = dfrad[dfrad.rad > 0]
@@ -180,11 +184,9 @@ def main(srcfu, tgtfu, fname=None):
 
     # Update Origin and Destination corresponding FU and Country:
     for tgt in dftmp.tgtgeocode.unique():
-        dftmp.loc[dftmp.tgtgeocode == tgt, 'Destination FU'] = dfgeocode.fu[dfgeocode.geocode == tgt].values
-        dftmp.loc[dftmp.tgtgeocode == tgt, 'Destination Country'] = 'BRASIL'
+        dftmp.loc[dftmp.tgtgeocode == tgt, 'tgtfu'] = dfgeocode.fu[dfgeocode.geocode == tgt].values
     for src in dftmp.srcgeocode.unique():
-        dftmp.loc[dftmp.srcgeocode == src, 'Origin FU'] = dfgeocode.fu[dfgeocode.geocode == src].values
-        dftmp.loc[dftmp.srcgeocode == src, 'Origin Country'] = 'BRASIL'
+        dftmp.loc[dftmp.srcgeocode == src, 'srcfu'] = dfgeocode.fu[dfgeocode.geocode == src].values
 
     del dfgeocode
 
