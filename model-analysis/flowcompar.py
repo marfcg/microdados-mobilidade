@@ -161,7 +161,7 @@ def main(srcfu, tgtfu, fname=None):
     dfflow = readflow(srcgeocodes, tgtgeocodes, fname)
 
     # Obtain total number of agents traveling from each Municipality
-    dftravel = dfflow[['srcgeocode', 'flow']].groupby(['srcgeocode']).agg(np.sum).reset_index().\
+    dftravel = dfflow[['srcgeocode', 'flow']].groupby(['srcgeocode'], as_index=False).agg(np.sum).\
         rename(columns={'flow': 'Ti'})
 
     # Create temporary data frame with all necessary columns for flow estimates
