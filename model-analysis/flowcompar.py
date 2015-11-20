@@ -153,9 +153,11 @@ def main(srcfu, tgtfu, fname=None):
         tgtgeocodes = list(dfgeocode.geocode[dfgeocode.fu.isin(tgtfu)])
 
     # Read distance matrix:
+    print('Reading distance matrix')
     dfdist = readdistance(srcgeocodes, tgtgeocodes)
 
     # Read flow matrix:
+    print('Reading flow matrix')
     dfflow = readflow(srcgeocodes, tgtgeocodes, fname)
 
     # Obtain total number of agents traveling from each Municipality
@@ -163,6 +165,7 @@ def main(srcfu, tgtfu, fname=None):
         rename(columns={'flow': 'Ti'})
 
     # Create temporary data frame with all necessary columns for flow estimates
+    print('Starting merges')
     # Create bi-directional distance matrix
     dftmp = pd.concat([dfdist, dfdist.rename(columns={'srcgeocode': 'tgtgeocode', 'tgtgeocode': 'srcgeocode'})])
     del dfdist
@@ -205,9 +208,11 @@ def main(srcfu, tgtfu, fname=None):
     dftmp.rename(columns={'srcgeocode': 'src', 'tgtgeocode': 'tgt', 'distance': 'dist'}, inplace=True)
 
     # Calculate corresponding Gravitational model flow:
+    print('Calculating gravitational model')
     dftmp = gravmodel(dftmp)
 
     # Calculate corresponding Radiation model flow:
+    print('Calculating radiation model')
     dftmp = radmodel(dftmp)
 
     # Print matrix with original data plus model estimations
