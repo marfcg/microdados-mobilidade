@@ -9,6 +9,7 @@ import argparse
 Compare flow obtained from Brazilian 2010 Census Microdata with Radiation and Gravitation models
 """
 
+
 def readmunicipality(listfu):
     """
     Reads tables of municipalities code.
@@ -62,13 +63,15 @@ def readflow(srcgeocodes, tgtgeocodes, fname=None):
         dfflow = pd.read_csv(fname)
 
     # Discard all unnecessary data:
-    dfflow.rename(columns={'Origin Municipality': 'srcname', 'Origin geocode': 'srcgeocode',
+    dfflow.rename(columns={'Origin Municipality': 'srcname', 'Origin geocode': 'srcgeocode', 'Origin FU': 'srcfu',
                            'Destination Municipality': 'tgtname', 'Destination geocode': 'tgtgeocode',
-                           'Population': 'srcpop', 'Total': 'flow', 'Std error': 'error'}, inplace=True)
-
+                           'Destination FU': 'tgtfu', 'Population': 'srcpop', 'Total': 'flow', 'Std error': 'error'},
+                  inplace=True)
     # Keep only Brazilian destinations
     dfflow = dfflow[dfflow['Destination Country'] == 'BRASIL']
+    dfflow = dfflow[['srcname', 'srcgeocode', 'srcfu', 'tgtname', 'tgtgeocode', 'tgtfu', 'srcpop', 'flow', 'error']]
     dfflow.tgtgeocode = dfflow.tgtgeocode.astype(int)
+    dfflow = dfflow[(dfflow.srcgeocode.isin(srcgeocodes)) & (dfflow.tgtgeocode.isin(tgtgeocodes))]
 
     return dfflow
 
@@ -124,8 +127,11 @@ def radmodel(dfin):
         for tgt in tgtlist:
             rij = np.float64(dfrad.dist[(dfrad.src == src) & (dfrad.tgt == tgt)])
             sij = np.float64(dfrad.tgtpop[(dfrad.src == src) & (dfrad.dist < rij)].sum())
-            mj = np.float64(dfrad.srcpop[dfrad.src == tgt].unique())
+            if np.isnan(sij):
+                sij = 0
+            mj = np.float64(dfrad.tgtpop[dfrad.tgt == tgt].unique())
             norm = (mi + sij) * (mi + mj + sij)
+            #print(rij,mi,mj,sij,norm)
             dfrad.loc[(dfrad.src == src) & (dfrad.tgt == tgt), 'rad'] *= np.float64(1) / norm
 
     return dfrad
@@ -147,23 +153,26 @@ def main(srcfu, tgtfu, fname=None):
         tgtgeocodes = list(dfgeocode.geocode[dfgeocode.fu.isin(tgtfu)])
 
     # Read distance matrix:
+    print('Reading distance matrix')
     dfdist = readdistance(srcgeocodes, tgtgeocodes)
 
     # Read flow matrix:
+    print('Reading flow matrix')
     dfflow = readflow(srcgeocodes, tgtgeocodes, fname)
 
     # Obtain total number of agents traveling from each Municipality
-    dftravel = dfflow[['srcgeocode', 'flow']].groupby(['srcgeocode']).agg(np.sum).reset_index().\
+    dftravel = dfflow[['srcgeocode', 'flow']].groupby(['srcgeocode'], as_index=False).agg(np.sum).\
         rename(columns={'flow': 'Ti'})
 
     # Create temporary data frame with all necessary columns for flow estimates
+    print('Starting merges')
     # Create bi-directional distance matrix
     dftmp = pd.concat([dfdist, dfdist.rename(columns={'srcgeocode': 'tgtgeocode', 'tgtgeocode': 'srcgeocode'})])
     del dfdist
 
     # Add column with data-based flow
     dftmp = pd.merge(dftmp, dfflow.drop(['srcpop', 'srcname', 'tgtname'], axis=1), on=['srcgeocode', 'tgtgeocode'],
-                      how='left')
+                     how='left')
 
     # Add column for source population
     dftmp = pd.merge(dftmp, dfgeocode[['geocode', 'pop']].rename(columns={'geocode': 'srcgeocode', 'pop': 'srcpop'}),
@@ -176,11 +185,9 @@ def main(srcfu, tgtfu, fname=None):
 
     # Update Origin and Destination corresponding FU and Country:
     for tgt in dftmp.tgtgeocode.unique():
-        dftmp.loc[dftmp.tgtgeocode == tgt, 'Destination FU'] = dfgeocode.fu[dfgeocode.geocode == tgt].values
-        dftmp.loc[dftmp.tgtgeocode == tgt, 'Destination Country'] = 'BRASIL'
+        dftmp.loc[dftmp.tgtgeocode == tgt, 'tgtfu'] = dfgeocode.fu[dfgeocode.geocode == tgt].values
     for src in dftmp.srcgeocode.unique():
-        dftmp.loc[dftmp.srcgeocode == src, 'Origin FU'] = dfgeocode.fu[dfgeocode.geocode == src].values
-        dftmp.loc[dftmp.srcgeocode == src, 'Origin Country'] = 'BRASIL'
+        dftmp.loc[dftmp.srcgeocode == src, 'srcfu'] = dfgeocode.fu[dfgeocode.geocode == src].values
 
     del dfgeocode
 
@@ -201,21 +208,23 @@ def main(srcfu, tgtfu, fname=None):
     dftmp.rename(columns={'srcgeocode': 'src', 'tgtgeocode': 'tgt', 'distance': 'dist'}, inplace=True)
 
     # Calculate corresponding Gravitational model flow:
-    dfgrav = gravmodel(dftmp)
+    print('Calculating gravitational model')
+    dftmp = gravmodel(dftmp)
 
     # Calculate corresponding Radiation model flow:
-    dfrad = radmodel(dfgrav)
+    print('Calculating radiation model')
+    dftmp = radmodel(dftmp)
 
     # Print matrix with original data plus model estimations
-    dfrad.to_csv('../data/src_%s-tgt_%s-mobility_grav_rad_matrix-.csv' % ('-'.join(srcfu), '-'.join(tgtfu)),
+    dftmp.to_csv('../data/src_%s-tgt_%s-mobility_grav_rad_matrix-.csv' % ('-'.join(srcfu), '-'.join(tgtfu)),
                  index=False)
     exit()
 
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description='Calculate Gravitational and Radiation Models flow estimate'+
-                                     ' and compare to real flow given.\n'+
+    parser = argparse.ArgumentParser(description='Calculate Gravitational and Radiation Models flow estimate' +
+                                     ' and compare to real flow given.\n' +
                                      'Assumes input file format as generated by model-analysis.py')
     parser.add_argument('--srcfu', '-srcfu', nargs='*', action='append',
                         help='Two letter name of source FU of interest. Accept multiple entries',
