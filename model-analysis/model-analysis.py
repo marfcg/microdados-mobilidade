@@ -90,7 +90,7 @@ def cleantable(dfmobilityin):
     dfmobility['Std error conserv'] = dfmobility['Std error'].copy()
     # Create list of unknowns
     ufdestlist = dfmobility['Destination FU'].unique()
-    unknown_list = ["%s,NÃO SABE MUNICÍPIO" % uf for uf in ufdestlist]  # Knows FU, does not know Municipality
+    unknown_list = ["%s NÃO SABE MUNICÍPIO" % uf for uf in ufdestlist]  # Knows FU, does not know Municipality
     unknown_list.append("IGNORADO")  # No info
     unknown_list.append(np.nan)  # In Brazil, unknown destination
     unknown_list.append("MULTIPLE DESTINATIONS")  # Multiple destinations
@@ -108,9 +108,9 @@ def cleantable(dfmobilityin):
         originmunlist = dfmobility_fu['Origin Municipality'].unique()
         for origmun in originmunlist:
 
-            # "FU,NÃO SABE MUNICÍPIO", can be any destination in the specific FU, in Brazil:
+            # "FU NÃO SABE MUNICÍPIO", can be any destination in the specific FU, in Brazil:
             for ufdest in ufacron2name:
-                charval = "%s,NÃO SABE MUNICÍPIO" % ufdest
+                charval = "%s NÃO SABE MUNICÍPIO" % ufdest
                 val = dfmobility_fu.loc[dfmobility_fu['Origin Municipality'] == origmun, 'Total']. \
                     where(dfmobility_fu['Destination Municipality'] == charval).dropna().to_frame(name='Total')
                 val['Std error'] = dfmobility_fu.loc[dfmobility_fu['Origin Municipality'] == origmun, 'Std error']. \

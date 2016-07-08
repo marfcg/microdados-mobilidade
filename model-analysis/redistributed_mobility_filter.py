@@ -49,6 +49,8 @@ def readfile(fname='data/all_FUs-redistributed_mobility_matrix.csv', colsrc='Ori
         else:
             df = df[df[colsrc].isin(valsrc)].copy()
 
+    print(df.head())
+    print(df.dtypes)
     return df
 
 
@@ -59,7 +61,9 @@ def inoutotal(df=pd.DataFrame(), colsrc='Origin FU', valsrc=None, coltgt='Destin
     :param df: Pandas Data Frame containing in/out flow
     :param colsrc: Column to use as filter
     :param valsrc: Value in column to filter by
-    
+    :param coltgt: Column to use as filter
+    :param valtgt: Value in column to filter by
+
     :return:
     ttinoutflow
     :rtype : pd.DataFrame
@@ -85,18 +89,25 @@ def inoutotal(df=pd.DataFrame(), colsrc='Origin FU', valsrc=None, coltgt='Destin
             valtgt = [valtgt]
         grpbyin = df.loc[df[coltgt].isin(valtgt), ['Destination FU', 'Destination Municipality', 'Destination geocode',
                                                    'Total']].groupby(['Destination FU', 'Destination Municipality',
-                                                                      'Destination geocode'], as_index=False).agg(np.sum)
+                                                                      'Destination geocode'],
+                                                                     as_index=False).agg(np.sum)
     else:
         grpbyin = df[['Destination FU', 'Destination Municipality', 'Destination geocode', 'Total']]. \
             groupby(['Destination FU', 'Destination Municipality', 'Destination geocode'], as_index=False).agg(np.sum)
 
+
     grpbyin.rename(columns={'Destination FU': 'FU', 'Destination Municipality': 'Municipality',
-                            'Destination geocode': 'geocode', 'Total': 'Total in'}, inplace=True)
-    grpbyout.rename(columns={'Origin FU': 'FU', 'Origin Municipality': 'Municipality', 'Origin geocode': 'geocode',
-                             'Total': 'Total in'}, inplace=True)
+                            'Destination geocode': 'geocode'}, inplace=True)
+    grpbyin = grpbyin[-(grpbyin.geocode.isin(['', 'SEVERAL']))].copy()
+    grpbyin.geocode = grpbyin.geocode.astype(int)
+    grpbyout.rename(columns={'Origin FU': 'FU', 'Origin Municipality': 'Municipality', 'Origin geocode': 'geocode'},
+                             inplace=True)
     print(grpbyout.head())
+    print(grpbyout.dtypes)
+
     print(grpbyin.head())
-    ttinoutflow = grpbyout.merge(grpbyin, how='outer', on=['FU', 'Municipality', 'geocode'])
+    print(grpbyin.dtypes)
+    ttinoutflow = grpbyin.merge(grpbyout, how='outer', on=['FU', 'Municipality', 'geocode'], suffixes=(' in', ' out'))
     print(ttinoutflow.head())
     del grpbyin
     del grpbyout
