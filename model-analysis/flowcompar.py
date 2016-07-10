@@ -23,11 +23,11 @@ def readmunicipality(listfu):
     """
 
     dfgeocode = pd.read_csv('../data/Brazil-municipalities-2010.csv')
-    dfgeocode.rename(columns={'CD_GEOCODM': 'geocode', 'NM_MUNICIP': 'name', 'SIGLA_ESTADO': 'fu', 'POPULATION': 'pop'},
+    dfgeocode.rename(columns={'CD_GEOCODM': 'geocode', 'NM_MUNICIP': 'name', 'SIGLA_ESTADO': 'fu', 'POPULATION': 'population'},
                      inplace=True)
 
-    if 'all' not in listfu and 'ALL' not in listfu:
-        dfgeocode = dfgeocode[dfgeocode.fu.isin(listfu)]
+    # if 'all' not in listfu and 'ALL' not in listfu:
+    #     dfgeocode = dfgeocode[dfgeocode.fu.isin(listfu)]
 
     return dfgeocode
 
@@ -47,10 +47,11 @@ def readdistance(srcgeocodes, tgtgeocodes):
                            'Distance(km)': 'distance'}, inplace=True)
 
     # Create bi-directional distance matrix
-    pd.concat([dfdist, dfdist.rename(columns={'srcgeocode': 'tgtgeocode', 'tgtgeocode': 'srcgeocode'})])
+    pd.concat([dfdist, dfdist.rename(columns={'srcgeocode': 'tgtgeocode', 'srcname': 'tgtname',
+                                              'tgtgeocode': 'srcgeocode', 'tgtname': 'srcgname'})])
 
     # Keep requested pairs only
-    dfdist = dfdist[(dfdist.srcgeocode.isin(srcgeocodes)) & (dfdist.tgtgeocode.isin(tgtgeocodes))]
+    # dfdist = dfdist[(dfdist.srcgeocode.isin(srcgeocodes)) & (dfdist.tgtgeocode.isin(tgtgeocodes))]
 
     return dfdist
 
@@ -104,16 +105,22 @@ def gravmodel(dfin, beta=1, gamma=2):
     """
 
     dfgrav = dfin.copy()
-    # Create column with estimated flow
+
+    # Fik ~ mi^alpha * mk^beta / r^gamma
     dfgrav['grav'] = dfgrav.tgtpop.pow(beta) / dfgrav.dist.pow(gamma)
-    for src in dfgrav.src.unique():
-        norm = np.float64(dfgrav.grav[dfgrav.src == src].sum())
-        dfgrav.loc[dfgrav.src == src, 'grav'] *= dfgrav.Ti[dfgrav.src == src] / norm
+
+    # Fik = Ti * mk^beta / rik^gamma / normi, so that sum_k (Fik) = Ti, which incorporates mi^alpha
+    dfnorm = dfgrav[['src', 'grav']].groupby('src').agg(sum).rename(columns={'grav': 'norm'})
+    dfgrav.grav = dfgrav[['src', 'Ti', 'grav']].apply(lambda x: x['Ti']*x['grav']/dfnorm.loc[int(x['src']), 'norm'],
+                                                      axis=1)
+    # for src in dfgrav.src.unique():
+    #     norm = np.float64(dfgrav.grav[dfgrav.src == src].sum())
+    #     dfgrav.loc[dfgrav.src == src, 'grav'] *= dfgrav.Ti[dfgrav.src == src] / norm
 
     return dfgrav
 
 
-def radmodel(dfin):
+def radmodel(dfin, dfdist, dfgeocode):
     """
     Estimate flow $F_{ij}$ based on the Radiation model, based on distance between nodes,
     resident and traveling populations:
@@ -128,25 +135,39 @@ def radmodel(dfin):
     """
 
     dfrad = dfin.copy()
+
+    def radnorm(src, tgt, dist):
+        s = dfdist.tgtgeocode[(dfdist.srcgeocode == src) & (dfdist.distance < dist)]
+        if s.empty:
+            ms = 0
+        else:
+            ms = dfgeocode.population[dfgeocode.geocode.isin(s)].sum()
+        mi = np.float64(dfgeocode.population[dfgeocode.geocode == src])
+        mj = np.float64(dfgeocode.population[dfgeocode.geocode == tgt])
+        val = (mi + ms)*(mi + mj + ms)
+        return val
+
     # Create column with estimated flow
     dfrad['rad'] = dfrad.Ti * dfrad.srcpop * dfrad.tgtpop
-    for src in dfrad.src.unique():
-        tgtlist = list(dfrad.tgt[dfrad.src == src])
-        mi = np.float64(dfrad.srcpop[dfrad.src == src].unique())
-        for tgt in tgtlist:
-            rij = np.float64(dfrad.dist[(dfrad.src == src) & (dfrad.tgt == tgt)])
-            sij = np.float64(dfrad.tgtpop[(dfrad.src == src) & (dfrad.dist < rij)].sum())
-            if np.isnan(sij):
-                sij = 0
-            mj = np.float64(dfrad.tgtpop[dfrad.tgt == tgt].unique())
-            norm = (mi + sij) * (mi + mj + sij)
-            #print(rij,mi,mj,sij,norm)
-            dfrad.loc[(dfrad.src == src) & (dfrad.tgt == tgt), 'rad'] *= np.float64(1) / norm
+    dfrad['rad'] *= dfrad[['src', 'tgt', 'dist']].apply(lambda x: np.float64(1)/radnorm(x['src'], x['tgt'], x['dist']),
+                                                        axis=1)
+    # for src in dfrad.src.unique():
+    #     tgtlist = list(dfrad.tgt[dfrad.src == src])
+    #     mi = np.float64(dfrad.srcpop[dfrad.src == src].unique())
+    #     for tgt in tgtlist:
+    #         rij = np.float64(dfrad.dist[(dfrad.src == src) & (dfrad.tgt == tgt)])
+    #         sij = np.float64(dfrad.tgtpop[(dfrad.src == src) & (dfrad.dist < rij)].sum())
+    #         if np.isnan(sij):
+    #             sij = 0
+    #         mj = np.float64(dfrad.tgtpop[dfrad.tgt == tgt].unique())
+    #         norm = (mi + sij) * (mi + mj + sij)
+    #         #print(rij,mi,mj,sij,norm)
+    #         dfrad.loc[(dfrad.src == src) & (dfrad.tgt == tgt), 'rad'] *= np.float64(1) / norm
 
     return dfrad
 
 
-def main(srcfu, tgtfu, fname=None):
+def main(srcfu, tgtfu, fname=None, model='both'):
 
     # Grab geocode of source and target Municipalities:
     listfu = srcfu.copy()
@@ -161,13 +182,19 @@ def main(srcfu, tgtfu, fname=None):
     else:
         tgtgeocodes = list(dfgeocode.geocode[dfgeocode.fu.isin(tgtfu)])
 
+    print(len(dfgeocode.geocode.unique()))
+
     # Read distance matrix:
     print('Reading distance matrix')
     dfdist = readdistance(srcgeocodes, tgtgeocodes)
+    print(len(dfdist.srcgeocode.unique()))
+    print(len(dfdist.tgtgeocode.unique()))
+    print(len(dfdist))
 
     # Read flow matrix:
     print('Reading flow matrix')
     dfflow = readflow(srcgeocodes, tgtgeocodes, fname)
+    print(len(dfflow.srcgeocode.unique()))
 
     # Obtain total number of agents traveling from each Municipality
     dftravel = dfflow[['srcgeocode', 'flow']].groupby(['srcgeocode'], as_index=False).agg(np.sum).\
@@ -176,18 +203,28 @@ def main(srcfu, tgtfu, fname=None):
     # Create temporary data frame with all necessary columns for flow estimates
     print('Starting merges')
     dftmp = dfdist.copy()
-    del dfdist
+    # del dfdist
 
     # Add column with data-based flow
     dftmp = pd.merge(dftmp, dfflow.drop(['srcpop', 'srcname', 'tgtname'], axis=1), on=['srcgeocode', 'tgtgeocode'],
-                     how='left')
+                     how='inner')
+    cities1 = set(dfdist.srcgeocode.unique())
+    cities2 = set(dfflow.srcgeocode.unique())
+    print(cities1 - cities2)
+    print(cities2 - cities1)
+    print(dfdist[(dfdist.srcgeocode == 1400704) & (dfdist.tgtgeocode.isin([1400100, 1400175, 1400407]))].head())
+    print(dfflow[dfflow.srcgeocode == 1400704].head())
+
+    print(len(dftmp.srcgeocode.unique()))
 
     # Add column for source population
-    dftmp = pd.merge(dftmp, dfgeocode[['geocode', 'pop']].rename(columns={'geocode': 'srcgeocode', 'pop': 'srcpop'}),
+    dftmp = pd.merge(dftmp, dfgeocode[['geocode', 'population']].rename(columns={'geocode': 'srcgeocode',
+                                                                                 'population': 'srcpop'}),
                      on='srcgeocode', how='left')
 
     # Add column for target population
-    dftmp = pd.merge(dftmp, dfgeocode[['geocode', 'pop']].rename(columns={'geocode': 'tgtgeocode', 'pop': 'tgtpop'}),
+    dftmp = pd.merge(dftmp, dfgeocode[['geocode', 'population']].rename(columns={'geocode': 'tgtgeocode',
+                                                                                 'population': 'tgtpop'}),
                      on='tgtgeocode', how='left')
     del dfflow
 
@@ -197,12 +234,12 @@ def main(srcfu, tgtfu, fname=None):
     for src in dftmp.srcgeocode.unique():
         dftmp.loc[dftmp.srcgeocode == src, 'srcfu'] = dfgeocode.fu[dfgeocode.geocode == src].values
 
-    del dfgeocode
+    # del dfgeocode
 
     # Add total number of traveling agents by source:
     dftmp = pd.merge(dftmp, dftravel, on='srcgeocode', how='left')
     del dftravel
-
+    exit()
     # Sort by origin-destination and reset index
     dftmp.sort(['srcgeocode', 'tgtgeocode']).reset_index().drop('index', axis=1)
 
@@ -215,16 +252,20 @@ def main(srcfu, tgtfu, fname=None):
     # Rename source and target geocode columns for simplicity
     dftmp.rename(columns={'srcgeocode': 'src', 'tgtgeocode': 'tgt', 'distance': 'dist'}, inplace=True)
 
-    # Calculate corresponding Gravitational model flow:
-    print('Calculating gravitational model')
-    dftmp = gravmodel(dftmp)
-
     # Calculate corresponding Radiation model flow:
-    print('Calculating radiation model')
-    dftmp = radmodel(dftmp)
+    if model in ['rad', 'both']:
+        print('Calculating radiation model')
+        dftmp = radmodel(dftmp, dfdist, dfgeocode)
+    del dfdist
+    del dfgeocode
+
+    # Calculate corresponding Gravitational model flow:
+    if model in ['grav', 'both']:
+        print('Calculating gravitational model')
+        dftmp = gravmodel(dftmp)
 
     # Print matrix with original data plus model estimations
-    dftmp.to_csv('../data/src_%s-tgt_%s-mobility_grav_rad_matrix-.csv' % ('-'.join(srcfu), '-'.join(tgtfu)),
+    dftmp.to_csv('../data/src_%s-tgt_%s-mobility_%s_matrix-.csv' % ('-'.join(srcfu), '-'.join(tgtfu), model),
                  index=False)
     exit()
 
@@ -244,6 +285,8 @@ if __name__ == '__main__':
     parser.add_argument('--tgtfu', '-tgtfu', nargs='*', action='append',
                         help='Two letter name of destination FU of interest. Accept multiple entries',
                         default=None)
+    parser.add_argument('--model', help='Which models to use (grav, rad, or both). Default both',
+                        default='both')
     parser.add_argument('--path', help='Path to mobility matrix file',
                         default='../data/all_FUs-redistributed_mobility_matrix.csv')
     args = parser.parse_args()
@@ -253,4 +296,4 @@ if __name__ == '__main__':
         args.tgtfu = args.srcfu
 
     print(args)
-    main(args.srcfu[0], args.tgtfu[0], args.path)
+    main(args.srcfu[0], args.tgtfu[0], args.path, args.model)
