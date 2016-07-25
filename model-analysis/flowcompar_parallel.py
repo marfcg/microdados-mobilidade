@@ -1,12 +1,13 @@
 # !/usr/bin/env python3
 # -*- coding: utf-8 -*-
 __author__ = 'Marcelo Ferreira da Costa Gomes'
-import pandas as pd
-import numpy as np
 import argparse
-from argparse import RawDescriptionHelpFormatter
-from multiprocess import Pool, Manager
 import time
+from argparse import RawDescriptionHelpFormatter
+
+import numpy as np
+import pandas as pd
+from multiprocess import Pool
 
 """
 Compare flow obtained from Brazilian 2010 Census Microdata with Radiation and Gravitation models
@@ -113,11 +114,20 @@ def gravmodel(dfin, beta=1, gamma=2):
         norm = np.float64(dfgrav.grav[dfgrav.src == src].sum())
         dfgrav.loc[dfgrav.src == src, 'grav'] *= dfgrav.Ti[dfgrav.src == src] / norm
 
-    rssi = (dfgrav.grav - dfgrav.flow).pow(2)
-    rss = rssi.sum()
-    chi = (rssi / dfgrav.flow).sum()
+    return(dfgrav)
 
-    return(beta, gamma, rss, chi)
+
+def gravfit(dfin, beta, gamma):
+
+    dfgravfit = gravmodel(dfin, beta, gamma)
+
+    n = len(dfgravfit)
+    rssi = (dfgravfit.grav - dfgravfit.flow).pow(2)
+    rss = rssi.sum()
+    aic = 4 + n*np.log(rss)
+    rss = rss/n
+
+    return(beta, gamma, rss, aic)
 
 
 def main(srcfu, tgtfu, fname=None):
@@ -156,13 +166,16 @@ def main(srcfu, tgtfu, fname=None):
     dftmp = pd.merge(dftmp, dfflow.drop(['srcpop', 'srcname', 'tgtname'], axis=1), on=['srcgeocode', 'tgtgeocode'],
                      how='left')
 
+
     # Add column for source population
     dftmp = pd.merge(dftmp, dfgeocode[['geocode', 'pop']].rename(columns={'geocode': 'srcgeocode', 'pop': 'srcpop'}),
                      on='srcgeocode', how='left')
 
+
     # Add column for target population
     dftmp = pd.merge(dftmp, dfgeocode[['geocode', 'pop']].rename(columns={'geocode': 'tgtgeocode', 'pop': 'tgtpop'}),
                      on='tgtgeocode', how='left')
+
     del dfflow
 
     # Update Origin and Destination corresponding FU and Country:
@@ -175,10 +188,11 @@ def main(srcfu, tgtfu, fname=None):
 
     # Add total number of traveling agents by source:
     dftmp = pd.merge(dftmp, dftravel, on='srcgeocode', how='left')
+
     del dftravel
 
     # Sort by origin-destination and reset index
-    dftmp.sort(['srcgeocode', 'tgtgeocode']).reset_index().drop('index', axis=1)
+    dftmp.sort_values(['srcgeocode', 'tgtgeocode'], axis=0, inplace=True).reset_index().drop('index', axis=1)
 
     # Fill na with 0
     dftmp.fillna(0, inplace=True)
@@ -191,33 +205,31 @@ def main(srcfu, tgtfu, fname=None):
 
     # Calculate corresponding Gravitational model flow:
     print('Calculating gravitational model')
-    beta_range = np.linspace(1, 3, num=21)
-    gamma_range = np.linspace(.1, 3, num=30)
-    loop_res = []
-    gamma = 2
-    # start = time.clock()
-    # for beta in beta_range:
-    #     for gamma in gamma_range:
-    #         betai, gammai, rssi, chii = gravmodel(dftmp, beta=beta, gamma=gamma)
-    #         loop_res.append([betai, gammai, rssi, chii])
-    # print('Simple loop:', time.clock() - start)
-    #
-    # fout = open('rss_chi_loop.csv', 'w')
-    # for res in loop_res:
-    #     fout.write('%s\n' % ','.join([str(v) for v in res]))
-    # fout.close()
+    beta_range = np.linspace(.5, 1.5, num=101)
+    gamma_range = np.linspace(.01, 1.5, num=150)
 
     map_res = []
     start = time.clock()
     p = Pool()
-    results = p.starmap_async(gravmodel, [(dftmp, beta, gamma) for gamma in gamma_range for beta in beta_range])
+    results = p.starmap_async(gravfit, [(dftmp, beta, gamma) for gamma in gamma_range for beta in beta_range])
     map_res = results.get()
     print('Map_async:', time.clock() - start)
 
-    fout = open('rss_chi_map.csv', 'w')
-    for res in map_res:
-        fout.write('%s\n' % ','.join([str(v) for v in res]))
-    fout.close()
+    df_res = pd.DataFrame.from_records(map_res, columns=['beta', 'gamma', 'rss/n', 'AIC'])
+    df_res.sort_values(by='AIC', axis=0, inplace=True)
+    df_res['Delta AIC'] = df_res.AIC - df_res.AIC.min()
+    df_res['AIC weight'] = np.exp(-.5*df_res['Delta AIC']) / np.exp(-.5*df_res['Delta AIC']).sum()
+    df_res['Evidence ratio'] = df_res['AIC weight'].max() / df_res['AIC weight']
+    df_res['Log_10(ER)'] = np.log10(df_res['Evidence ratio'])
+    df_res.to_csv('grav_model_rss_aic.csv')
+
+    beta_opt = df_res.beta[df_res['Evidence ratio'] == 1]
+    gamma_opt = df_res.gamma[df_res['Evidence ratio'] == 1]
+
+    dftmp = gravmodel(dftmp, beta=beta_opt, gamma=gamma_opt)
+
+    dftmp.to_csv('../data/src_%s-tgt_%s-mobility_grav_matrix-.csv' % ('-'.join(srcfu), '-'.join(tgtfu)),
+                 index=False)
 
     exit()
 
