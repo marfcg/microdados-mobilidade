@@ -3,6 +3,7 @@
 __author__ = 'Marcelo Ferreira da Costa Gomes'
 import pandas as pd
 import numpy as np
+import statsmodels.formula.api as smf
 import argparse
 from argparse import RawDescriptionHelpFormatter
 
@@ -25,7 +26,7 @@ def readmunicipality(listfu):
     dfgeocode = pd.read_csv('../data/Brazil-municipalities-2010.csv')
     dfgeocode.rename(columns={'CD_GEOCODM': 'geocode', 'NM_MUNICIP': 'name', 'SIGLA_ESTADO': 'fu', 'POPULATION': 'population'},
                      inplace=True)
-
+    dfgeocode.geocode = dfgeocode.geocode.astype(int)
     # if 'all' not in listfu and 'ALL' not in listfu:
     #     dfgeocode = dfgeocode[dfgeocode.fu.isin(listfu)]
 
@@ -41,14 +42,16 @@ def readdistance(srcgeocodes, tgtgeocodes):
     :return dfdist: Data frame with geodesic distance between every pair (undirected)
     """
 
-    dfdist = pd.read_csv('../data/Brazil-municipalities-2010-centroids-distance.csv')
+    dfdist = pd.read_csv('../data/Brazil-municipalities-2010-centroids-distancias.csv')
     dfdist.rename(columns={'Source geocode': 'srcgeocode', 'Source name': 'srcname',
                            'Target geocode': 'tgtgeocode', 'Target name': 'tgtname',
                            'Distance(km)': 'distance'}, inplace=True)
 
     # Create bi-directional distance matrix
-    pd.concat([dfdist, dfdist.rename(columns={'srcgeocode': 'tgtgeocode', 'srcname': 'tgtname',
-                                              'tgtgeocode': 'srcgeocode', 'tgtname': 'srcgname'})])
+    dfdist = pd.concat([dfdist, dfdist.rename(columns={'srcgeocode': 'tgtgeocode', 'srcname': 'tgtname',
+                                                       'tgtgeocode': 'srcgeocode', 'tgtname': 'srcname'})])
+    dfdist.srcgeocode = dfdist.srcgeocode.astype(int)
+    dfdist.tgtgeocode = dfdist.tgtgeocode.astype(int)
 
     # Keep requested pairs only
     # dfdist = dfdist[(dfdist.srcgeocode.isin(srcgeocodes)) & (dfdist.tgtgeocode.isin(tgtgeocodes))]
@@ -81,6 +84,7 @@ def readflow(srcgeocodes, tgtgeocodes, fname=None):
     dfflow = dfflow[dfflow['Destination Country'] == 'BRASIL']
     dfflow = dfflow[['srcname', 'srcgeocode', 'srcfu', 'tgtname', 'tgtgeocode', 'tgtfu', 'srcpop', 'flow', 'error']]
     dfflow.tgtgeocode = dfflow.tgtgeocode.astype(int)
+    dfflow.srcgeocode = dfflow.srcgeocode.astype(int)
     dfflow = dfflow[(dfflow.srcgeocode.isin(srcgeocodes)) & (dfflow.tgtgeocode.isin(tgtgeocodes))]
 
     return dfflow
@@ -105,6 +109,16 @@ def gravmodel(dfin, beta=1, gamma=2):
     """
 
     dfgrav = dfin.copy()
+    dfgrav['logflow'] = np.log(dfgrav.flow)
+    dfgrav['logdist'] = np.log(dfgrav.dist)
+    dfgrav['logtgtpop'] = np.log(dfgrav.flow)
+
+    # est = smf.ols(formula='logflow ~ logdist + logtgtpop', data=dfgrav).fit()
+    # gamma = est.params[1]
+    # beta = est.params[2]
+    #
+    # print('beta=%.2f, gamma=%.2f' % (beta, gamma))
+    # print(est.summary())
 
     # Fik ~ mi^alpha * mk^beta / r^gamma
     dfgrav['grav'] = dfgrav.tgtpop.pow(beta) / dfgrav.dist.pow(gamma)
@@ -192,7 +206,7 @@ def main(srcfu, tgtfu, fname=None, model='both'):
     # Read flow matrix:
     print('Reading flow matrix')
     dfflow = readflow(srcgeocodes, tgtgeocodes, fname)
-    print(len(dftmp.srcgeocode.unique()))
+    print(len(dfflow.srcgeocode.unique()))
 
     # Obtain total number of agents traveling from each Municipality
     dftravel = dfflow[['srcgeocode', 'flow']].groupby(['srcgeocode'], as_index=False).agg(np.sum).\
@@ -206,11 +220,6 @@ def main(srcfu, tgtfu, fname=None, model='both'):
     # Add column with data-based flow
     dftmp = pd.merge(dftmp, dfflow.drop(['srcpop', 'srcname', 'tgtname'], axis=1), on=['srcgeocode', 'tgtgeocode'],
                      how='inner')
-    cities1 = set(dfdist.srcgeocode.unique())
-    cities2 = set(dfflow.srcgeocode.unique())
-    print(cities1 - cities2)
-    print(cities2 - cities1)
-
     print(len(dftmp.srcgeocode.unique()))
 
     # Add column for source population
@@ -242,26 +251,33 @@ def main(srcfu, tgtfu, fname=None, model='both'):
     # Fill na with 0
     dftmp.fillna(0, inplace=True)
 
-    # Print matrix with original data
-    dftmp.to_csv('../data/src_%s-tgt_%s-extended-mobility_matrix.csv' % ('-'.join(srcfu), '-'.join(tgtfu)), index=False)
-
     # Rename source and target geocode columns for simplicity
     dftmp.rename(columns={'srcgeocode': 'src', 'tgtgeocode': 'tgt', 'distance': 'dist'}, inplace=True)
 
-    # Calculate corresponding Radiation model flow:
-    if model in ['rad', 'both']:
-        print('Calculating radiation model')
-        dftmp = radmodel(dftmp, dfdist, dfgeocode)
-    del dfdist
-    del dfgeocode
+    # Print matrix with original data
+    dftmp.to_csv('../data/src_%s-tgt_%s-extended-mobility_matrix.csv' % ('-'.join(srcfu), '-'.join(tgtfu)), index=False)
 
     # Calculate corresponding Gravitational model flow:
     if model in ['grav', 'both']:
         print('Calculating gravitational model')
         dftmp = gravmodel(dftmp)
+        print(dftmp[['flow', 'grav']].corr())
+
+    # Calculate corresponding Radiation model flow:
+    if model in ['rad', 'both']:
+        print('Calculating radiation model')
+        dftmp = radmodel(dftmp, dfdist, dfgeocode)
+        print(dftmp[['flow', 'grav']].corr())
+
+    del dfdist
+    del dfgeocode
 
     # Print matrix with original data plus model estimations
-    dftmp.to_csv('../data/src_%s-tgt_%s-mobility_%s_matrix-.csv' % ('-'.join(srcfu), '-'.join(tgtfu), model),
+    if model == 'both':
+        model = 'grav_rad'
+        print(dftmp[['grav', 'rad']].corr())
+
+    dftmp.to_csv('../data/src_%s-tgt_%s-mobility_%s_matrix.csv' % ('-'.join(srcfu), '-'.join(tgtfu), model),
                  index=False)
     exit()
 
