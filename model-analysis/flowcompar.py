@@ -42,7 +42,7 @@ def readdistance(srcgeocodes, tgtgeocodes):
     :return dfdist: Data frame with geodesic distance between every pair (undirected)
     """
 
-    dfdist = pd.read_csv('../data/Brazil-municipalities-2010-centroids-distancias.csv')
+    dfdist = pd.read_csv('../data/Brazil-municipalities-2010-centroids-distance.csv')
     dfdist.rename(columns={'Source geocode': 'srcgeocode', 'Source name': 'srcname',
                            'Target geocode': 'tgtgeocode', 'Target name': 'tgtname',
                            'Distance(km)': 'distance'}, inplace=True)
@@ -108,28 +108,19 @@ def gravmodel(dfin, beta=1, gamma=2):
     :return dfgrav: pd.DataFrame with non-null flow for every pair of nodes
     """
 
+    # Create column with estimated flow
     dfgrav = dfin.copy()
     dfgrav['logflow'] = np.log(dfgrav.flow)
     dfgrav['logdist'] = np.log(dfgrav.dist)
     dfgrav['logtgtpop'] = np.log(dfgrav.flow)
 
-    # est = smf.ols(formula='logflow ~ logdist + logtgtpop', data=dfgrav).fit()
-    # gamma = est.params[1]
-    # beta = est.params[2]
-    #
-    # print('beta=%.2f, gamma=%.2f' % (beta, gamma))
-    # print(est.summary())
-
     # Fik ~ mi^alpha * mk^beta / r^gamma
     dfgrav['grav'] = dfgrav.tgtpop.pow(beta) / dfgrav.dist.pow(gamma)
 
     # Fik = Ti * mk^beta / rik^gamma / normi, so that sum_k (Fik) = Ti, which incorporates mi^alpha
-    dfnorm = dfgrav[['src', 'grav']].groupby('src').agg(sum).rename(columns={'grav': 'norm'})
-    dfgrav.grav = dfgrav[['src', 'Ti', 'grav']].apply(lambda x: x['Ti']*x['grav']/dfnorm.loc[int(x['src']), 'norm'],
-                                                      axis=1)
-    # for src in dfgrav.src.unique():
-    #     norm = np.float64(dfgrav.grav[dfgrav.src == src].sum())
-    #     dfgrav.loc[dfgrav.src == src, 'grav'] *= dfgrav.Ti[dfgrav.src == src] / norm
+    for src in dfgrav.src.unique():
+        norm = np.float64(dfgrav.grav[dfgrav.src == src].sum())
+        dfgrav.loc[dfgrav.src == src, 'grav'] *= dfgrav.Ti[dfgrav.src == src] / norm
 
     return dfgrav
 
@@ -246,7 +237,7 @@ def main(srcfu, tgtfu, fname=None, model='both'):
     del dftravel
 
     # Sort by origin-destination and reset index
-    dftmp.sort(['srcgeocode', 'tgtgeocode']).reset_index().drop('index', axis=1)
+    dftmp = dftmp.sort_values(['srcgeocode', 'tgtgeocode'], axis=0).reset_index().drop('index', axis=1)
 
     # Fill na with 0
     dftmp.fillna(0, inplace=True)
@@ -279,6 +270,7 @@ def main(srcfu, tgtfu, fname=None, model='both'):
 
     dftmp.to_csv('../data/src_%s-tgt_%s-mobility_%s_matrix.csv' % ('-'.join(srcfu), '-'.join(tgtfu), model),
                  index=False)
+
     exit()
 
 
