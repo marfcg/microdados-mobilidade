@@ -219,14 +219,14 @@ def main(srcfu, tgtfu, fname=None):
 
     # Calculate corresponding Gravitational model flow:
     print('Calculating gravitational model')
-    bi = 1.0
-    bf = 2.0
-    nb = 101
+    bi = 1.2
+    bf = 2.5
+    nb = 131
     beta_range = np.linspace(bi, bf, num=nb)
 
-    gi = 1.0
-    gf = 3.0
-    ng = 201
+    gi = 2.0
+    gf = 3.5
+    ng = 151
     gamma_range = np.linspace(gi, gf, num=ng)
 
     map_res = []
