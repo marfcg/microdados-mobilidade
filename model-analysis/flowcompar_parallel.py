@@ -92,7 +92,7 @@ def readflow(srcgeocodes, tgtgeocodes, fname=None):
     return dfflow
 
 
-def gravmodel(dfin, beta=1, gamma=2):
+def gravmodel(dfin, beta=np.float(1), gamma=np.float(2)):
     """
     Estimate flow $F_{ij}$ based on the Gravitational model, based on distance between nodes,
     resident and traveling populations:
@@ -224,9 +224,9 @@ def main(srcfu, tgtfu, fname=None):
     nb = 101
     beta_range = np.linspace(bi, bf, num=nb)
 
-    gi = .01
-    gf = 1.5
-    ng = 150
+    gi = 1.0
+    gf = 3.0
+    ng = 201
     gamma_range = np.linspace(gi, gf, num=ng)
 
     map_res = []
@@ -242,18 +242,20 @@ def main(srcfu, tgtfu, fname=None):
     df_res['AIC weight'] = np.exp(-.5*df_res['Delta AIC']) / np.exp(-.5*df_res['Delta AIC']).sum()
     df_res['Evidence ratio'] = df_res['AIC weight'].max() / df_res['AIC weight']
     df_res['Log_10(ER)'] = np.log10(df_res['Evidence ratio'])
-    df_res.to_csv('grav_model_rss_aic_beta_%.2f-_%.2f_gamma_%.2f-%.2f.csv' % (bi, bf, gi, gf))
+    df_res.to_csv('../data/src_%s-tgt_%s-grav_model_rss_aic_beta_%.2f-%.2f_gamma_%.2f-%.2f.csv' % ('-'.join(srcfu),
+                                                                                           '-'.join(tgtfu), bi, bf, gi,
+                                                                                           gf), index=False)
 
-    beta_opt = df_res.beta[df_res['Evidence ratio'] == 1]
-    gamma_opt = df_res.gamma[df_res['Evidence ratio'] == 1]
+    beta_opt = np.float(df_res.beta[df_res['Evidence ratio'] == 1.0])
+    gamma_opt = np.float(df_res.gamma[df_res['Evidence ratio'] == 1.0])
+    print('beta_opt=%.2f, gamma_opt=%.2f' %(beta_opt, gamma_opt))
 
     dftmp = gravmodel(dftmp, beta=beta_opt, gamma=gamma_opt)
     print(dftmp[['flow', 'grav']].corr())
 
     dftmp.to_csv('../data/src_%s-tgt_%s-mobility_grav_beta_%.2f_gamma_%.2f_matrix.csv' % ('-'.join(srcfu),
                                                                                           '-'.join(tgtfu), beta_opt,
-                                                                                          gamma_opt),
-                 index=False)
+                                                                                          gamma_opt), index=False)
 
     exit()
 
