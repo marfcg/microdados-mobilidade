@@ -219,8 +219,8 @@ def main(srcfu, tgtfu, fname=None):
 
     # Calculate corresponding Gravitational model flow:
     print('Calculating gravitational model')
-    bi = .5
-    bf = 1.5
+    bi = 1.0
+    bf = 2.0
     nb = 101
     beta_range = np.linspace(bi, bf, num=nb)
 
@@ -230,11 +230,12 @@ def main(srcfu, tgtfu, fname=None):
     gamma_range = np.linspace(gi, gf, num=ng)
 
     map_res = []
-    start = time.clock()
+    start_clock = time.clock()
+    start_time = time.time()
     p = Pool()
     results = p.starmap_async(gravfit, [(dftmp, beta, gamma) for gamma in gamma_range for beta in beta_range])
     map_res = results.get()
-    print('Map_async:', time.clock() - start)
+    print('Map_async:', time.clock() - start_clock, time.time() - start_time)
 
     df_res = pd.DataFrame.from_records(map_res, columns=['beta', 'gamma', 'rss/n', 'AIC'])
     df_res.sort_values(by='AIC', axis=0, inplace=True)
