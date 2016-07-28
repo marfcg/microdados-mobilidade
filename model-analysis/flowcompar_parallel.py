@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 __author__ = 'Marcelo Ferreira da Costa Gomes'
 import argparse
-import time
+import timeit
 from argparse import RawDescriptionHelpFormatter
 
 import numpy as np
@@ -120,11 +120,12 @@ def gravmodel(dfin, beta=np.float(1), gamma=np.float(2)):
     dfgrav['grav'] = dfgrav.tgtpop.pow(beta) / dfgrav.dist.pow(gamma)
 
     # Fik = Ti * mk^beta / rik^gamma / normi, so that sum_k (Fik) = Ti, which incorporates mi^alpha
-    for src in dfgrav.src.unique():
-        norm = np.float64(dfgrav.grav[dfgrav.src == src].sum())
-        dfgrav.loc[dfgrav.src == src, 'grav'] *= dfgrav.Ti[dfgrav.src == src] / norm
+    # Fik = Ti * mk^beta / rik^gamma / normi, so that sum_k (Fik) = Ti, which incorporates mi^alpha
+    norm = dfgrav[['src', 'grav']].groupby('src').sum()
+    dfgrav['grav'] = dfgrav.apply(lambda row: row['grav'] * row['Ti'] / norm.grav[row['src']], axis=1)
 
     return(dfgrav)
+
 
 
 def gravfit(dfin, beta, gamma):
@@ -219,23 +220,27 @@ def main(srcfu, tgtfu, fname=None):
 
     # Calculate corresponding Gravitational model flow:
     print('Calculating gravitational model')
-    bi = 1.2
-    bf = 2.5
-    nb = 131
+    bi = 0.1
+    bf = 3.0
+    nb = 30
     beta_range = np.linspace(bi, bf, num=nb)
 
-    gi = 2.0
-    gf = 3.5
-    ng = 151
+    gi = 0.1
+    gf = 3.0
+    ng = 30
     gamma_range = np.linspace(gi, gf, num=ng)
 
+    # mgr = Manager()
+    # ns = mgr.Namespace()
+    # ns.df = dftmp
+
     map_res = []
-    start_clock = time.clock()
-    start_time = time.time()
+    start_clock = timeit.default_timer()
     p = Pool()
     results = p.starmap_async(gravfit, [(dftmp, beta, gamma) for gamma in gamma_range for beta in beta_range])
+
     map_res = results.get()
-    print('Map_async:', time.clock() - start_clock, time.time() - start_time)
+    print('Map_async:', timeit.default_timer() - start_clock)
 
     df_res = pd.DataFrame.from_records(map_res, columns=['beta', 'gamma', 'rss/n', 'AIC'])
     df_res.sort_values(by='AIC', axis=0, inplace=True)
