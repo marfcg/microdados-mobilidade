@@ -237,7 +237,8 @@ def main(srcfu, tgtfu, fname=None):
     map_res = []
     start_clock = timeit.default_timer()
     p = Pool()
-    results = p.starmap_async(gravfit, [(dftmp, beta, gamma) for gamma in gamma_range for beta in beta_range])
+    results = p.starmap_async(gravfit, [(dftmp, beta, gamma) for gamma in gamma_range for beta in beta_range],
+                              chunksize=4)
 
     map_res = results.get()
     print('Map_async:', timeit.default_timer() - start_clock)
