@@ -124,13 +124,13 @@ def main():
     print(dftmp.sort_values(by='flow density', ascending=False).head(10))
 
 
-    xval, hval = extracthisto(dfBR, 'flow')
+    hval, xval = extracthisto(dfBR, 'flow')
     plt.plot(xval, hval, label='BR')
-    xval, hval = extracthisto(dfSP, 'flow')
+    hval, xval = extracthisto(dfSP, 'flow')
     plt.plot(xval, hval, label='SP')
-    xval, hval = extracthisto(dfRJ, 'flow')
+    hval, xval = extracthisto(dfRJ, 'flow')
     plt.plot(xval, hval, label='RJ')
-    xval, hval = extracthisto(dfPR, 'flow')
+    hval, xval = extracthisto(dfPR, 'flow')
     plt.plot(xval, hval, label='PR')
 
     plt.xscale('log')
@@ -145,7 +145,7 @@ def main():
         label.set_fontproperties(fontpropticks)
     ax.legend(prop=fontproplgd, loc='lower left')
     plt.tight_layout()
-    plt.savefig('histo-Fij.svg', facecolor=(0,0,0,0))
+    plt.savefig('histo-Fij.png', facecolor=(0,0,0,0))
     plt.clf()
 
     dftmp = dfBR[['src','Ti']].drop_duplicates()
@@ -176,7 +176,7 @@ def main():
         label.set_fontproperties(fontpropticks)
     ax.legend(prop=fontproplgd, loc='lower left')
     plt.tight_layout()
-    plt.savefig('histo-Ti.svg', facecolor=(0,0,0,0))
+    plt.savefig('histo-Ti.png', facecolor=(0,0,0,0))
     plt.clf()
 
 

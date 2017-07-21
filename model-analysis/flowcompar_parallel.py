@@ -127,7 +127,6 @@ def gravmodel(dfin, beta=np.float(1), gamma=np.float(2)):
     return(dfgrav)
 
 
-
 def gravfit(dfin, beta, gamma):
 
     dfgravfit = gravmodel(dfin, beta, gamma)
@@ -220,14 +219,14 @@ def main(srcfu, tgtfu, fname=None):
 
     # Calculate corresponding Gravitational model flow:
     print('Calculating gravitational model')
-    bi = 0.1
-    bf = 3.0
-    nb = 30
+    bi = 1.50
+    bf = 1.80
+    nb = 31
     beta_range = np.linspace(bi, bf, num=nb)
 
-    gi = 0.1
-    gf = 3.0
-    ng = 30
+    gi = 2.50
+    gf = 3.10
+    ng = 61
     gamma_range = np.linspace(gi, gf, num=ng)
 
     # mgr = Manager()
@@ -254,12 +253,12 @@ def main(srcfu, tgtfu, fname=None):
 
     beta_opt = np.float(df_res.beta[df_res['Evidence ratio'] == 1.0])
     gamma_opt = np.float(df_res.gamma[df_res['Evidence ratio'] == 1.0])
-    print('beta_opt=%.2f, gamma_opt=%.2f' %(beta_opt, gamma_opt))
+    print('beta_opt=%.3f, gamma_opt=%.3f' %(beta_opt, gamma_opt))
 
     dftmp = gravmodel(dftmp, beta=beta_opt, gamma=gamma_opt)
     print(dftmp[['flow', 'grav']].corr())
 
-    dftmp.to_csv('../data/src_%s-tgt_%s-mobility_grav_beta_%.2f_gamma_%.2f_matrix.csv' % ('-'.join(srcfu),
+    dftmp.to_csv('../data/src_%s-tgt_%s-mobility_grav_beta_%.3f_gamma_%.3f_matrix.csv' % ('-'.join(srcfu),
                                                                                           '-'.join(tgtfu), beta_opt,
                                                                                           gamma_opt), index=False)
 

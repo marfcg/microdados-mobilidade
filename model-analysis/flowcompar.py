@@ -258,7 +258,7 @@ def main(srcfu, tgtfu, fname=None, model='both'):
     if model in ['rad', 'both']:
         print('Calculating radiation model')
         dftmp = radmodel(dftmp, dfdist, dfgeocode)
-        print(dftmp[['flow', 'grav']].corr())
+        print(dftmp[['flow', 'rad']].corr())
 
     del dfdist
     del dfgeocode
