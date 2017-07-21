@@ -92,8 +92,11 @@ def cleantable(dfmobilityin):
     ufdestlist = dfmobility['Destination FU'].unique()
     unknown_list = ["%s NÃO SABE MUNICÍPIO" % uf for uf in ufdestlist]  # Knows FU, does not know Municipality
     unknown_list.append("IGNORADO")  # No info
-    unknown_list.append(np.nan)  # In Brazil, unknown destination
+    unknown_list.append(np.nan)  # In Brazil, unknown destination if Destination geocode=9999999 or anywhere otherwise.
     unknown_list.append("MULTIPLE DESTINATIONS")  # Multiple destinations
+    unknown_list.append('9999999') # In Brazil, unknown destination
+
+    dfmobility.loc[dfmobility['Destination geocode'] == '9999999', 'Destination Municipality'] = '9999999'
 
     # Redistribute unkowns by known frequencies, respecting FU when known.
     # Keep "multiple destinations" as a separate entity since it's an unknown of different nature.
@@ -142,13 +145,13 @@ def cleantable(dfmobilityin):
                     dfmobility_fu.loc[(dfmobility_fu['Origin Municipality'] == origmun) &
                                       (dfmobility_fu['Destination Municipality'] == charval), 'Std error conserv'] = 0
 
-            # "NaN", can be any destination in Brazil:
+            # Destination Municiaplity "9999999", can be any destination in Brazil:
             val = dfmobility_fu.loc[dfmobility_fu['Origin Municipality'] == origmun, 'Total']. \
-                where(dfmobility_fu['Destination Municipality'] == np.nan).dropna().to_frame(name='Total')
+                where(dfmobility_fu['Destination Municipality'] == '9999999').dropna().to_frame(name='Total')
             val['Std error'] = dfmobility_fu.loc[dfmobility_fu['Origin Municipality'] == origmun, 'Std error']. \
-                where(dfmobility_fu['Destination Municipality'] == np.nan).dropna().to_frame(name='Std error')
+                where(dfmobility_fu['Destination Municipality'] == '9999999').dropna().to_frame(name='Std error')
             val['Error factor'] = dfmobility_fu.loc[dfmobility_fu['Origin Municipality'] == origmun, 'Error factor']. \
-                where(dfmobility_fu['Destination Municipality'] == np.nan).dropna().to_frame(name='Error factor')
+                where(dfmobility_fu['Destination Municipality'] == '9999999').dropna().to_frame(name='Error factor')
             if val.size > 0:
                 # Redistribute over known Brazilian destinations from origmun
                 dftmp = dfmobility_fu.loc[(dfmobility_fu['Origin Municipality'] == origmun) &
@@ -167,11 +170,11 @@ def cleantable(dfmobilityin):
                                   (-dfmobility_fu['Destination Municipality'].isin(unknown_list)),
                                   ['Total', 'Std error', 'Std error conserv']] = dftmp.copy()
                 dfmobility_fu.loc[(dfmobility_fu['Origin Municipality'] == origmun) &
-                                  (dfmobility_fu['Destination Municipality'] == np.nan), 'Total'] = 0
+                                  (dfmobility_fu['Destination Municipality'] == '9999999'), 'Total'] = 0
                 dfmobility_fu.loc[(dfmobility_fu['Origin Municipality'] == origmun) &
-                                  (dfmobility_fu['Destination Municipality'] == np.nan), 'Std error'] = 0
+                                  (dfmobility_fu['Destination Municipality'] == '9999999'), 'Std error'] = 0
                 dfmobility_fu.loc[(dfmobility_fu['Origin Municipality'] == origmun) &
-                                  (dfmobility_fu['Destination Municipality'] == np.nan), 'Std error conserv'] = 0
+                                  (dfmobility_fu['Destination Municipality'] == '9999999'), 'Std error conserv'] = 0
 
             # "IGNORADO", can be any destination:
             val = dfmobility_fu.loc[dfmobility_fu['Origin Municipality'] == origmun, 'Total']. \
@@ -202,6 +205,37 @@ def cleantable(dfmobilityin):
                                   (dfmobility_fu['Destination Municipality'] == 'IGNORADO'), 'Std error'] = 0
                 dfmobility_fu.loc[(dfmobility_fu['Origin Municipality'] == origmun) &
                                   (dfmobility_fu['Destination Municipality'] == 'IGNORADO'), 'Std error conserv'] = 0
+
+            # NaN, can be any destination:
+            val = dfmobility_fu.loc[dfmobility_fu['Origin Municipality'] == origmun, 'Total']. \
+                where(dfmobility_fu['Destination Municipality'].isnull()).dropna().to_frame(name='Total')
+            val['Std error'] = dfmobility_fu.loc[dfmobility_fu['Origin Municipality'] == origmun, 'Std error']. \
+                where(dfmobility_fu['Destination Municipality'].isnull()).dropna().to_frame(name='Std error')
+            val['Error factor'] = dfmobility_fu.loc[dfmobility_fu['Origin Municipality'] == origmun, 'Error factor']. \
+                where(dfmobility_fu['Destination Municipality'].isnull()).dropna().to_frame(name='Error factor')
+            if val.size > 0:
+                # Redistribute over full set of known destinations from origmun
+                dftmp = dfmobility_fu.loc[(dfmobility_fu['Origin Municipality'] == origmun) &
+                                          (dfmobility_fu['Origin FU'] == orig) &
+                                          (-dfmobility_fu['Destination Municipality'].isin(unknown_list)),
+                                          ['Total', 'Std error', 'Std error conserv']].copy()
+                known_dest = dftmp.Total.sum()
+                dftmp['Total'] += dftmp['Total'] * float(val['Total']) / known_dest
+                dftmp['Std error'] += np.square(float(val['Error factor'])) * dftmp['Total'].apply(np.square) / (
+                    known_dest ** 2)
+                dftmp['Std error conserv'] += float(val['Std error']) * dftmp['Total'].apply(np.square) / (
+                    known_dest ** 2)
+                dfmobility_fu.loc[(dfmobility_fu['Origin Municipality'] == origmun) &
+                                  (dfmobility_fu['Origin FU'] == orig) &
+                                  (-dfmobility_fu['Destination Municipality'].isin(unknown_list)),
+                                  ['Total', 'Std error', 'Std error conserv']] = dftmp.copy()
+                dfmobility_fu.loc[(dfmobility_fu['Origin Municipality'] == origmun) &
+                                  (dfmobility_fu['Destination Municipality'].isnull()), 'Total'] = 0
+                dfmobility_fu.loc[(dfmobility_fu['Origin Municipality'] == origmun) &
+                                  (dfmobility_fu['Destination Municipality'].isnull()), 'Std error'] = 0
+                dfmobility_fu.loc[(dfmobility_fu['Origin Municipality'] == origmun) &
+                                  (dfmobility_fu['Destination Municipality'].isnull()), 'Std error conserv'] = 0
+
         # Take the square root of the redistributed errors and update table:
         dfmobility_fu['Std error'] = dfmobility_fu['Std error'].apply(np.sqrt)
         dfmobility_fu['Std error conserv'] = dfmobility_fu['Std error conserv'].apply(np.sqrt)

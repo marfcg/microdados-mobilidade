@@ -98,7 +98,7 @@ def inoutotal(df=pd.DataFrame(), colsrc='Origin FU', valsrc=None, coltgt='Destin
 
     grpbyin.rename(columns={'Destination FU': 'FU', 'Destination Municipality': 'Municipality',
                             'Destination geocode': 'geocode'}, inplace=True)
-    grpbyin = grpbyin[-(grpbyin.geocode.isin(['', 'SEVERAL']))].copy()
+    grpbyin = grpbyin[-(grpbyin.geocode.isin(['', 'SEVERAL', '       ']))].copy()
     grpbyin.geocode = grpbyin.geocode.astype(int)
     grpbyout.rename(columns={'Origin FU': 'FU', 'Origin Municipality': 'Municipality', 'Origin geocode': 'geocode'},
                              inplace=True)
@@ -113,6 +113,7 @@ def inoutotal(df=pd.DataFrame(), colsrc='Origin FU', valsrc=None, coltgt='Destin
     del grpbyout
 
     ttinoutflow.fillna(0, inplace=True)
+    ttinoutflow['Total'] = ttinoutflow[['Total in', 'Total out']].sum(axis=1)
     return ttinoutflow
 
 
